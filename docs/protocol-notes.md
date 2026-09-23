@@ -5,6 +5,34 @@ credentials, session, or authorized TCP endpoint were available. The user
 explicitly selected offline implementation/testing. Nothing below should be
 read as a successful real-XMU acceptance result.
 
+### Live follow-up: first authenticated profile
+
+After the initial offline stage, the user successfully completed browser SSO
+and ran `check`. Reusing that local session reproduced the parser failure.
+The API returned a TCP profile with an inline CA, `remote-cert-tls server`, and
+`cipher AES-256-CBC`; it contains no tls-auth/tls-crypt key, no data-ciphers list,
+and no verify-x509-name. Only those compatibility facts were inspected; no
+tokens, CA bytes or profile were written to logs/fixtures.
+
+The immediate rejection is **missing control-channel protection**, before
+certificate-identity or cipher validation. This is a limitation of the pinned
+library, not a failed SSO login. Ordinary TLS-mode OpenVPN without the optional
+tls-auth/tls-crypt outer layer is not implemented by this upstream revision.
+Removing its parser check alone would still fail the core client's key
+validation/wrapper construction and is not a fix.
+
+The profile's legacy `cipher AES-256-CBC` is not evidence of the actually
+negotiated data cipher. AEAD support remains unknown. Implementing a TLS-only
+control packet wrapper, deciding the CA/server-role identity compatibility
+policy, and a controlled AEAD negotiation experiment are needed before this
+endpoint can be checked end to end. No cipher or certificate policy was changed
+by the diagnostic fix. Errors now expose only allowlisted reason descriptions
+and numeric profile line numbers, never raw upstream error values.
+
+The remaining sections describe the original offline findings unless updated
+explicitly; real transport handshake, ACL and data-plane acceptance are still
+outstanding.
+
 ## Exact references
 
 | Repository | Revision | Use |

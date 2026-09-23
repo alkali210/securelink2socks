@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/netip"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -199,11 +200,7 @@ func normalizeProfile(decoded string) (string, error) {
 func (p Profile) Parse() (*ovpn.Parsed, error) {
 	parsed, err := ovpn.Parse(strings.NewReader(p.Text), &ovpn.ParseOptions{Username: p.Username, Password: p.Password})
 	if err != nil {
-		if errors.Is(err, ovpn.ErrNoServerIdentity) {
-			return nil, errors.New("profile lacks server identity verification; live compatibility investigation required")
-		}
-		// Upstream parser errors can include raw profile lines and secrets.
-		return nil, errors.New("profile is not supported by pinned go-openvpn; check cipher and directive compatibility")
+		return nil, profileParseError(err)
 	}
 	for _, r := range parsed.Remotes {
 		ip, e := netip.ParseAddr(r.Host)
@@ -213,4 +210,43 @@ func (p Profile) Parse() (*ovpn.Parsed, error) {
 		}
 	}
 	return parsed, nil
+}
+
+var profileErrorLine = regexp.MustCompile(`^line ([0-9]+)(?: \([^)]*\))?: `)
+
+// Never return the upstream error verbatim: it may contain profile values.
+// Only locally defined descriptions and a numeric line number are emitted.
+func profileParseError(err error) error {
+	if errors.Is(err, ovpn.ErrNoServerIdentity) {
+		return errors.New("profile lacks server identity verification; live compatibility investigation required")
+	}
+	message := err.Error()
+	location := ""
+	if m := profileErrorLine.FindStringSubmatch(message); m != nil {
+		location = " at line " + m[1]
+	}
+	for err != nil && errors.Unwrap(err) != nil {
+		err = errors.Unwrap(err)
+	}
+	detail := err.Error()
+	reason := "unsupported directive or malformed value"
+	switch {
+	case detail == "comp-lzo is not supported (compression is disabled)":
+		reason = "comp-lzo requests unsupported LZO compression"
+	case strings.HasPrefix(detail, "compress ") && strings.HasSuffix(detail, " is not supported"):
+		reason = "compress requests an unsupported compression mode"
+	case strings.HasPrefix(detail, "missing control-channel protection:"):
+		reason = "missing tls-auth/tls-crypt control-channel protection (required by pinned go-openvpn)"
+	case strings.HasPrefix(detail, "multiple control-channel keys set;"):
+		reason = "multiple control-channel protection keys"
+	case strings.HasPrefix(detail, "cipher ") && strings.HasSuffix(detail, "(AEAD only: AES-256-GCM, AES-128-GCM, CHACHA20-POLY1305)"):
+		reason = "cipher policy includes an unsupported non-AEAD cipher; live negotiation evidence is required before changing it"
+	case strings.HasPrefix(detail, "ca[") && strings.HasSuffix(detail, "no certificates parsed (PEM malformed?)"):
+		reason = "CA block contains no valid PEM certificates"
+	case strings.HasPrefix(detail, "client cert/key pair"):
+		reason = "client certificate/key pair is missing or malformed"
+	case detail == "dev tap is not supported (tun mode only)" || detail == "dev-type tap is not supported (tun mode only)":
+		reason = "TAP profiles are unsupported"
+	}
+	return fmt.Errorf("profile compatibility error%s: %s", location, reason)
 }
