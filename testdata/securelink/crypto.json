@@ -1,0 +1,12 @@
+{
+  "provenance": "Synthetic vectors cross-checked with .NET System.Security.Cryptography; no live credentials",
+  "key": "0123456789abcdef",
+  "plaintext": "{\"org\":\"xmu\",\"type\":1}",
+  "ciphertext_base64": "Xl9m0gnaTOIcyLXMlPFK0lNnS6WPQXscZiJ/R3PsGsY=",
+  "management_username": "testuser",
+  "management_password": "cEPv28GMU54yXSzJYNesXg%3D%3D",
+  "timestamp": "1700000000000",
+  "nonce": "1234567890",
+  "signed_body": "dGVzdA==",
+  "signature": "MGNHMJQ3MDFHMDU1NDK5ZJG3MDJKYTVLYWIXNWY1MGY0NMFJNZDKZA=="
+}

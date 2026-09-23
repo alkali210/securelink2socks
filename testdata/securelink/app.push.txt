@@ -1,0 +1,1 @@
+topology subnet,ifconfig 192.0.2.2 255.255.255.0,cipher AES-256-GCM,app [addr:192.0.2.10/32][proto:any] [port:any],app [addr:198.51.100.20/32][proto:any] [port:21],app [addr:203.0.113.0/30][proto:any] [port:any]

@@ -1,0 +1,10 @@
+/bin/
+/.cache/
+/.local/
+*.exe
+*.test
+coverage.out
+session.json
+device_id
+*.ovpn
+!testdata/**/*.ovpn

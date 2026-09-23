@@ -1,0 +1,1 @@
+{"networkConfig":{"clientConf":"client%0Adev+tun%0Aproto+tcp-client%0Averify-x509-name+gateway.example+name%0Adata-ciphers+AES-256-GCM%0A%3Cca%3E%0A{{TEST_CA}}%0A%3C%2Fca%3E","priorServers":[{"ip":"192.0.2.1","ports":[10000]}],"alternateServers":[]}}
