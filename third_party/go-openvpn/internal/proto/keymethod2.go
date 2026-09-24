@@ -82,6 +82,10 @@ func MarshalKeyMethod2(km KeyMethod2) ([]byte, error) {
 		size += 2 + 2 // two empty-string length prefixes
 	}
 	size += 2 + len(km.PeerInfo) + 1
+	// The native peer parses this message from one TLS plaintext record.
+	if size > 16384 {
+		return nil, errors.New("proto: KEY_METHOD 2 exceeds one TLS record")
+	}
 
 	out := make([]byte, 0, size)
 	out = append(out, 0, 0, 0, 0)

@@ -147,7 +147,7 @@ func WriteControlMessage(w io.Writer, s string) error {
 	// OpenVPN extracts NUL-delimited commands from each decrypted record.
 	// Writing the terminator separately makes a separate TLS record and can
 	// cause the peer to discard the unterminated command.
-	if len(s) > MaxControlMessageLen {
+	if len(s)+1 > MaxControlMessageLen {
 		return errors.New("control: text message too long")
 	}
 	msg := append([]byte(s), 0)

@@ -198,7 +198,7 @@ func (ks *keepaliveServer) run(
 	if _, err := control.ReadControlMessage(tlsConn); err != nil {
 		return err
 	}
-	pushReply := "PUSH_REPLY,ifconfig 10.8.0.6 255.255.255.0,topology subnet,peer-id " +
+	pushReply := "PUSH_REPLY,key-derivation tls-ekm,ifconfig 10.8.0.6 255.255.255.0,topology subnet,peer-id " +
 		itoa(peerID) + ",cipher " + cipher + ",tun-mtu 1500"
 	if ks.pingInterval > 0 {
 		pushReply += ",ping " + itoa(uint32(ks.pingInterval))

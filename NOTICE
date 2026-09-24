@@ -11,5 +11,7 @@ github.com/n0madic/go-openvpn, revision
 12597991e31263f9309a6589dfd63a304349bafc (AGPL-3.0-or-later).
 Changes: expose raw PUSH options; add opt-in plain outer control framing;
 correct control-message TLS record boundaries, transport/key-size options,
-and platform peer-info; add regression tests. See docs/upstream-patch.md.
+and platform peer-info; preserve TLS record boundaries; assemble PUSH
+continuations; select TLS-EKM or OpenVPN PRF key derivation; add regression
+tests. See docs/upstream-patch.md.
 The upstream license and copyright notices are preserved.

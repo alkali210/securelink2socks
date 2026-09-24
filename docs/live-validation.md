@@ -1,50 +1,56 @@
 # XMU compatibility investigation — 2026-09-24
 
-The user authorized the AEAD-only experiment and supplied their own SSO login.
-No tokens, usernames, passwords, raw profiles or raw server messages are kept
-in this report. References were cloned outside this repository.
+The user authorized live diagnostics and provided browser SSO in their own
+session directory. No credentials or raw profiles/PUSH are kept in this report.
 
-Confirmed observations:
+## Current results
 
-- Browser SSO, cached-session loading, API refresh and VPN configuration work.
-- The supplied profile uses TCP, AES-256-CBC, inline CA and
-  `remote-cert-tls server`, without tls-auth/tls-crypt or a hostname constraint.
-  The normal strict parser therefore rejects it.
-- The opt-in experiment retains CA chain verification and requires explicit
-  serverAuth EKU. It advertises only implemented AEAD ciphers.
-- The experimental connection completes the verified inner TLS handshake and
-  receives server KEY_METHOD 2. The gateway rejects PUSH_REQUEST with
-  AUTH_FAILED and no reason. One forced API refresh and retry has the same
-  result. No cipher, assigned IPv4 or app ACL has been received.
-- The user reports official SecureLink works and confirmed it was disconnected
-  before the latest trial; rejection persists with it disconnected.
-- The final build with corrected AES-128-GCM key-size advertisement still
-  receives the same rejection, including after the bounded refresh/retry.
+- Real login, API refresh and config succeed.
+- TLS chain and explicit serverAuth verification succeed using profile CA.
+- TCP gateway handshake selects AES-128-GCM and assigns an IPv4 address.
+- Multi-part PUSH provides app ACLs. Parsing yields 66 deduplicated IPv4 TCP
+  grants for this account; domain rules are ignored without DNS.
+- The gateway does not select TLS-EKM. Standard OpenVPN KEY_METHOD 2 PRF
+  produces working AEAD keys: 14 authenticated keepalives in 15 seconds,
+  zero AEAD-open failures. Previously the incorrect EKM path produced zero
+  authenticated pings and an AEAD-open failure.
+- A read-only before/after comparison of adapter identity/status, IPv4 routes
+  and DNS configuration was unchanged during a diagnostic run.
 
-Validation completed: project `go test ./...`, `go vet ./...`, dependency
-`go test -parallel 1 ./...`, and Windows CLI build. After the final rekey
-key-size change, the session package passed again. Error-redaction tests and
-the original opt-in live-test guard are retained; offline tests use synthetic
-credentials only.
+## Causes and corrections
 
-Dependency defects corrected during investigation: missing ordinary outer
-control framing; split TLS writes for control commands and their NUL terminator;
-UDP options advertised over TCP; non-native Windows platform name; and 256-bit
-key size advertised for AES-128-GCM. See upstream-patch.md for details/tests.
-These corrections alone do not establish the cause of XMU authentication
-rejection.
+Fresh browser login and disconnecting official SecureLink did not resolve
+AUTH_FAILED. The actual authentication failure was removed by disabling Go's
+adaptive TLS record sizing: it split a long KEY_METHOD 2 write, whereas native
+OpenVPN parses peer-info from a single SSL_read. A synthetic long-token test
+failed before and passed after the correction.
 
-Credential construction was compared to both reference implementations. Their
-actual config builders use the access token for UV_CODE and the same encrypted,
-URL-encoded management password and UV fields. MySecureLink also contains an
-older TMP-token helper, but its config builder does not use that helper; there
-is insufficient evidence to switch this implementation to a TMP token.
+The next failure, missing cipher, was a partially read PUSH bundle. Bounded
+push-continuation assembly exposed the final cipher/IP fields. The following
+ACL failure was the difference between reference log formatting and real raw
+syntax: proto and port share brackets, with semicolon-separated port lists.
+Finally, data-key derivation had to follow the negotiated PRF/EKM policy.
 
-The experiment opens only the API and gateway sockets. It creates no host VPN
-interface, route, DNS setting or SOCKS listener, and performs no private-address
-scan. Full host-state invariance and real userspace TCP have not been accepted.
+Earlier fixes include ordinary control framing, complete NUL-terminated
+control-message writes, correct transport/key-size options and platform names.
+All retain verified TLS and AEAD-only data encryption; none enable CBC.
 
-Remaining gate: explain AUTH_FAILED using fresh-session or native-client
-comparison evidence, then verify AEAD, exact raw app grammar, nonempty ACL and
-an authorized userspace TCP target. SOCKS/reconnect and throughput work remain
-blocked by the implementation plan's real-handshake gate.
+## Remaining acceptance gate
+
+The reference project's two documented endpoints were checked against the
+current account's ACL. Neither was authorized, so no direct or tunneled TCP
+connection was attempted to either target. There was no address/port scan and
+no use of reference credentials. A known authorized XMU-internal TCP endpoint
+is still needed to prove direct-host failure versus userspace success.
+
+The initial plan explicitly requires that proof before SOCKS implementation.
+SOCKS, reconnect, Mihomo and throughput acceptance therefore remain incomplete.
+The successful handshake/keepalive results are not full proxy acceptance.
+
+## Offline checks
+
+Project tests, go vet, dependency serial tests and Windows build pass. Tests
+include an independent Python HMAC PRF vector, EKM and legacy-PRF memory AEAD
+echo, long peer-info record boundaries, continuation assembly/fail-closed
+behavior, certificate policy and ACL port/domain restrictions. Test fixtures
+contain synthetic values only. Live checks remain opt-in.

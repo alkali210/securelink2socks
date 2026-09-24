@@ -21,14 +21,15 @@ import (
 )
 
 type Report struct {
-	Stage        string `json:"stage,omitempty"`
-	AEADProbe    bool   `json:"aead_probe,omitempty"`
-	Transport    string `json:"transport"`
-	Remote       string `json:"remote"`
-	Cipher       string `json:"cipher"`
-	IPv4         string `json:"ipv4"`
-	ACLRules     int    `json:"acl_rules"`
-	TCPConnected bool   `json:"tcp_connected"`
+	Stage               string `json:"stage,omitempty"`
+	AEADProbe           bool   `json:"aead_probe,omitempty"`
+	Transport           string `json:"transport"`
+	Remote              string `json:"remote"`
+	Cipher              string `json:"cipher"`
+	IPv4                string `json:"ipv4"`
+	ACLRules            int    `json:"acl_rules"`
+	TCPConnected        bool   `json:"tcp_connected"`
+	DataChannelVerified bool   `json:"data_channel_verified"`
 }
 
 var ErrVPNAuthRejected = errors.New("VPN authentication rejected")
@@ -46,7 +47,7 @@ func CheckAEAD(ctx context.Context, profile securelink.Profile) (Report, error) 
 func check(ctx context.Context, profile securelink.Profile, target netip.AddrPort, experiment bool) (Report, error) {
 	var report Report
 	report.AEADProbe = experiment
-	parse := profile.Parse
+	parse := profile.ParseXMU
 	if experiment {
 		parse = profile.ParseAEADProbe
 	}
@@ -97,6 +98,24 @@ func check(ctx context.Context, profile securelink.Profile, target netip.AddrPor
 	report.ACLRules = snapshot.Len()
 	if snapshot.Len() == 0 {
 		return report, errors.New("no usable app ACL; traffic denied")
+	}
+	// A successful TLS/PUSH exchange alone does not prove matching data keys.
+	// Require an authenticated inbound AEAD packet before claiming readiness.
+	verifyCtx, stopVerify := context.WithTimeout(ctx, 12*time.Second)
+	defer stopVerify()
+	tick := time.NewTicker(100 * time.Millisecond)
+	defer tick.Stop()
+	for !report.DataChannelVerified {
+		stats := cli.Stats()
+		if stats.PingIn > 0 || stats.Forwarded > 0 {
+			report.DataChannelVerified = true
+			break
+		}
+		select {
+		case <-verifyCtx.Done():
+			return report, errors.New("no authenticated VPN data received before verification timeout")
+		case <-tick.C:
+		}
 	}
 	stack, err := netstack.New(cli)
 	if err != nil {

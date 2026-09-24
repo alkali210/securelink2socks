@@ -23,6 +23,17 @@ Production delta:
    and rekey option strings, instead of always UDPv4 and 256 bits.
 7. Use native OpenVPN platform names (`win`/`mac`) and advertise `IV_TCPNL=1`,
    consistent with the existing AEAD replay window.
+8. Disable Go adaptive TLS record sizing on initial/rekey client connections
+   without mutating caller TLS configs; cap KEY_METHOD 2 at one 16 KiB record.
+   Native OpenVPN parses peer-info within a single SSL_read result. Long
+   synthetic provider fields reproduce the failure before this correction.
+9. Assemble bounded PUSH continuation bundles (2 = more, 1 = final) before
+   interpreting cipher/IP/ACL. Reject incomplete or malformed sequences.
+10. Select TLS-EKM only when pushed via key-derivation/protocol-flags;
+    otherwise use the standard OpenVPN KEY_METHOD 2 PRF for AEAD keys.
+    Retain/clear pre_master at the correct lifetime and apply the same policy
+    during rekey. Add an independent Python HMAC golden and memory AEAD echo
+    coverage for PRF; EKM test peers now explicitly advertise their policy.
 
 `raw_push_test.go` verifies that an unknown `app` option survives the internal
 parser, public conversion and reconnect callback dispatch. Additional tests

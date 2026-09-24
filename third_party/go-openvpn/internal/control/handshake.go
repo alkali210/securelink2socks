@@ -109,7 +109,7 @@ func Run(ctx context.Context, layer *reliable.Layer, localAddr, remoteAddr net.A
 	// 2. Run TLS handshake over the reliable layer.
 	emit(trace.StageTLSHandshake, nil)
 	adapter := reliable.NewAdapter(layer, localAddr, remoteAddr)
-	tlsConn := tls.Client(adapter, cfg.TLSConfig)
+	tlsConn := NewTLSClient(adapter, cfg.TLSConfig)
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
 		err = fmt.Errorf("control: TLS handshake: %w", err)
 		emit(trace.StageTLSHandshake, err)
@@ -129,6 +129,7 @@ func Run(ctx context.Context, layer *reliable.Layer, localAddr, remoteAddr net.A
 		Password:     cfg.Password,
 		PeerInfo:     buildPeerInfo(ciphersStr, cfg.PeerInfoVersion, cfg.PeerInfoExtra),
 	}
+	defer clear(clientKM.PreMaster[:])
 	if _, err := rand.Read(clientKM.PreMaster[:]); err != nil {
 		err = fmt.Errorf("control: gen pre_master: %w", err)
 		emit(trace.StageKeyMethod2Send, err)
@@ -150,15 +151,14 @@ func Run(ctx context.Context, layer *reliable.Layer, localAddr, remoteAddr net.A
 		emit(trace.StageKeyMethod2Send, err)
 		return nil, err
 	}
+	defer clear(clientKMBytes)
 	if _, err := tlsConn.Write(clientKMBytes); err != nil {
 		err = fmt.Errorf("control: send client KEY_METHOD 2: %w", err)
 		emit(trace.StageKeyMethod2Send, err)
 		return nil, err
 	}
-	// pre_master is now embedded in the marshalled buffer (which crypto/tls
-	// owns) and the struct copy in the goroutine stack. Zero both so a heap
-	// dump or core file doesn't expose the secret long after the handshake.
-	clear(clientKM.PreMaster[:])
+	// Erase the wire buffer now; retain pre_master only until negotiated key
+	// derivation finishes (its deferred clear also covers all error paths).
 	clear(clientKMBytes)
 
 	// 4. Receive server's KEY_METHOD 2.
@@ -180,7 +180,7 @@ func Run(ctx context.Context, layer *reliable.Layer, localAddr, remoteAddr net.A
 
 	// 6. Read response — PUSH_REPLY or AUTH_FAILED.
 	emit(trace.StagePushReply, nil)
-	msg, err := ReadControlMessage(tlsConn)
+	msg, err := ReadPushReply(tlsConn)
 	if err != nil {
 		err = fmt.Errorf("control: read response: %w", err)
 		emit(trace.StagePushReply, err)
@@ -207,17 +207,17 @@ func Run(ctx context.Context, layer *reliable.Layer, localAddr, remoteAddr net.A
 		return nil, err
 	}
 
-	// 7. Derive data-channel keys via TLS-EKM.
+	// 7. Derive data-channel keys using the authenticated negotiated policy.
 	emit(trace.StageDataKeys, nil)
 	cs := tlsConn.ConnectionState()
-	keys, err := DeriveDataKeys(cs)
+	remoteSID, _ := layer.RemoteSessionID()
+	keys, err := DeriveNegotiatedKeys(cs, pushReply.Raw, &clientKM, &serverKM, layer.LocalSessionID(), remoteSID)
 	if err != nil {
 		emit(trace.StageDataKeys, err)
 		return nil, err
 	}
 
 	emit(trace.StageComplete, nil)
-	remoteSID, _ := layer.RemoteSessionID()
 	return &Result{
 		TLSConn:     tlsConn,
 		KeyMaterial: keys,
@@ -227,6 +227,16 @@ func Run(ctx context.Context, layer *reliable.Layer, localAddr, remoteAddr net.A
 		RemoteSID:   remoteSID,
 		ServerKM2:   serverKM,
 	}, nil
+}
+
+// NewTLSClient preserves OpenVPN application-message record boundaries.
+// Native peers parse KEY_METHOD 2 (including peer-info) from one SSL_read.
+// Go's adaptive first records otherwise split a long provider token and the
+// peer can authenticate without receiving the complete peer-info field.
+func NewTLSClient(conn net.Conn, cfg *tls.Config) *tls.Conn {
+	cloned := cfg.Clone()
+	cloned.DynamicRecordSizingDisabled = true
+	return tls.Client(conn, cloned)
 }
 
 // buildOptionsString assembles the options field server-side parses for the

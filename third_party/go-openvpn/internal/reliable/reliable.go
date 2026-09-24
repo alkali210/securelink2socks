@@ -208,6 +208,8 @@ func (l *Layer) KeyID() uint8 {
 }
 
 // RemoteSessionID returns the peer's session-id if known.
+func (l *Layer) LocalSessionID() uint64 { return l.cfg.LocalSessionID }
+
 func (l *Layer) RemoteSessionID() (uint64, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()

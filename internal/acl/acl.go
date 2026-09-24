@@ -38,9 +38,9 @@ func (s *Snapshot) AllowsTCP(target netip.AddrPort) bool {
 	return false
 }
 
-// Reference docs show proto:any with port:any or a decimal single port.
-// TCP/UDP/ranges/lists remain rejected until real raw PUSH evidence exists.
-var appPattern = regexp.MustCompile(`^app\s+\[addr:([^\[\]\s]+)\]\s*\[proto:any\]\s*\[port:([^\[\]\s]+)\]$`)
+// Live XMU pushes combine proto and port in one bracket and use semicolon
+// port lists. Keep the separated bracket form from the reference fixtures.
+var appPattern = regexp.MustCompile(`^app\s+\[(addr|domain):([^\[\]\s]+)\]\s*\[proto:(any|tcp)(?:\]\s*\[|\s+)port:([^\[\]\s]+)\]$`)
 
 func ParsePush(raw string) (*Snapshot, error) {
 	if len(raw) > 4*1024*1024 || strings.ContainsRune(raw, '\x00') {
@@ -58,26 +58,38 @@ func ParsePush(raw string) (*Snapshot, error) {
 		if m == nil {
 			return nil, errors.New("unsupported app ACL syntax")
 		}
-		prefix, err := netip.ParsePrefix(m[1])
+		var ports []uint16
+		if m[4] != "any" {
+			for _, part := range strings.Split(m[4], ";") {
+				for _, ch := range part {
+					if ch < '0' || ch > '9' {
+						return nil, errors.New("invalid app port")
+					}
+				}
+				p, err := strconv.ParseUint(part, 10, 16)
+				if err != nil || p == 0 {
+					return nil, errors.New("invalid app port")
+				}
+				ports = append(ports, uint16(p))
+			}
+		} else {
+			ports = []uint16{0}
+		}
+		// Domain grants cannot authorize an IPv4 literal without DNS. They
+		// never become IP rules and cannot broaden another rule's scope.
+		if m[1] == "domain" {
+			continue
+		}
+		prefix, err := netip.ParsePrefix(m[2])
 		if err != nil || !prefix.Addr().Is4() {
 			return nil, errors.New("invalid app IPv4 prefix")
 		}
-		r := rule{prefix: prefix.Masked(), anyPort: m[2] == "any"}
-		if !r.anyPort {
-			for _, ch := range m[2] {
-				if ch < '0' || ch > '9' {
-					return nil, errors.New("invalid app port")
-				}
+		for _, port := range ports {
+			r := rule{prefix: prefix.Masked(), port: port, anyPort: port == 0}
+			if !seen[r] {
+				s.rules = append(s.rules, r)
+				seen[r] = true
 			}
-			p, err := strconv.ParseUint(m[2], 10, 16)
-			if err != nil || p == 0 {
-				return nil, errors.New("invalid app port")
-			}
-			r.port = uint16(p)
-		}
-		if !seen[r] {
-			s.rules = append(s.rules, r)
-			seen[r] = true
 		}
 	}
 	return s, nil

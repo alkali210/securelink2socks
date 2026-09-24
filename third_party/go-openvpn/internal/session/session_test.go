@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -339,6 +340,8 @@ func runPingWithCipher(t *testing.T, cipher string, plain ...bool) {
 	if plainMode {
 		cfg.TLSCryptV1 = nil
 		cfg.AllowPlainControl = true
+		// Model provider JWT/device fields exceeding Go's initial TLS record.
+		cfg.PeerInfoExtra = map[string]string{"UV_CODE": string(bytes.Repeat([]byte("x"), 2500))}
 	}
 	sess, err := session.DialWithTransport(ctx, cfg, cTr)
 	if err != nil {
@@ -630,7 +633,15 @@ func runServerWithDataEcho(
 	}
 	defer func() { _ = tlsConn.Close() }()
 
-	if _, err := control.ReadKeyMethod2(tlsConn, false, false); err != nil {
+	// Native OpenVPN parses KEY_METHOD 2 from one SSL_read result, not a
+	// stream assembled across records. A large peer-info field must survive.
+	kmRecord := make([]byte, 16384)
+	nKM, err := tlsConn.Read(kmRecord)
+	if err != nil {
+		return err
+	}
+	clientKM, err := proto.ParseKeyMethod2(kmRecord[:nKM], false, false)
+	if err != nil {
 		return err
 	}
 
@@ -653,8 +664,12 @@ func runServerWithDataEcho(
 	if msg != "PUSH_REQUEST" {
 		return errors.New("expected PUSH_REQUEST, got: " + msg)
 	}
-	pushReply := "PUSH_REPLY,ifconfig 10.8.0.6 255.255.255.0,topology subnet,peer-id " + itoa(peerID) +
+	pushReply := "PUSH_REPLY,key-derivation tls-ekm,ifconfig 10.8.0.6 255.255.255.0,topology subnet,peer-id " + itoa(peerID) +
 		",cipher " + cipher + ",tun-mtu 1500,ping 10,ping-restart 60"
+	_, legacy := wrap.(plaincontrol.Wrapper)
+	if legacy {
+		pushReply = strings.Replace(pushReply, "key-derivation tls-ekm,", "", 1)
+	}
 	if err := control.WriteControlMessage(tlsConn, pushReply); err != nil {
 		return err
 	}
@@ -665,6 +680,14 @@ func runServerWithDataEcho(
 	if err != nil {
 		return err
 	}
+	if legacy {
+		clientSID, _ := layer.RemoteSessionID()
+		keys := control.DeriveLegacyKeys(&clientKM, &serverKM, clientSID, layer.LocalSessionID())
+		copy(mat, keys[:])
+		clear(keys[:])
+	}
+	clear(clientKM.PreMaster[:])
+	clear(kmRecord)
 	keyLen := 32 // AES-256-GCM
 	if cipher == "AES-128-GCM" {
 		keyLen = 16
@@ -920,7 +943,7 @@ func continueServerSim(
 	if msg != "PUSH_REQUEST" {
 		return errors.New("expected PUSH_REQUEST")
 	}
-	pushReply := "PUSH_REPLY,ifconfig 10.8.0.6 255.255.255.0,topology subnet,peer-id " + itoa(peerID) +
+	pushReply := "PUSH_REPLY,key-derivation tls-ekm,ifconfig 10.8.0.6 255.255.255.0,topology subnet,peer-id " + itoa(peerID) +
 		",cipher " + cipher + ",tun-mtu 1500,ping 10,ping-restart 60"
 	if err := control.WriteControlMessage(tlsConn, pushReply); err != nil {
 		return err
@@ -1230,7 +1253,7 @@ func runRekeyAwareServer(
 			if msg != "PUSH_REQUEST" {
 				return errors.New("expected PUSH_REQUEST")
 			}
-			pushReply := "PUSH_REPLY,ifconfig 10.8.0.6 255.255.255.0,topology subnet,peer-id " + itoa(peerID) +
+			pushReply := "PUSH_REPLY,key-derivation tls-ekm,ifconfig 10.8.0.6 255.255.255.0,topology subnet,peer-id " + itoa(peerID) +
 				",cipher " + cipher + ",tun-mtu 1500,ping 10,ping-restart 60"
 			if err := control.WriteControlMessage(tlsConn, pushReply); err != nil {
 				return err
@@ -1522,7 +1545,7 @@ func minimalServerHandshake(
 	if _, err := control.ReadControlMessage(tlsConn); err != nil {
 		return nil, err
 	}
-	pushReply := "PUSH_REPLY,ifconfig 10.8.0.6 255.255.255.0,topology subnet,peer-id 1,cipher AES-256-GCM,tun-mtu 1500,ping 10,ping-restart 60"
+	pushReply := "PUSH_REPLY,key-derivation tls-ekm,ifconfig 10.8.0.6 255.255.255.0,topology subnet,peer-id 1,cipher AES-256-GCM,tun-mtu 1500,ping 10,ping-restart 60"
 	if err := control.WriteControlMessage(tlsConn, pushReply); err != nil {
 		return nil, err
 	}

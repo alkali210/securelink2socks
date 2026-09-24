@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/n0madic/go-openvpn/internal/control"
 	"io"
+	"strings"
 	"testing"
 )
 
@@ -35,5 +36,8 @@ func TestWriteControlMessageRecord(t *testing.T) {
 	}
 	if err := control.WriteControlMessage(shortWriter{}, "PUSH_REQUEST"); !errors.Is(err, io.ErrShortWrite) {
 		t.Fatal("short write lost")
+	}
+	if err := control.WriteControlMessage(p, strings.Repeat("x", control.MaxControlMessageLen)); err == nil {
+		t.Fatal("message and terminator exceed one TLS record")
 	}
 }

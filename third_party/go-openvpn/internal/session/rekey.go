@@ -5,7 +5,6 @@ package session
 import (
 	"context"
 	"crypto/rand"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"strings"
@@ -181,7 +180,7 @@ func (m *rekeyManager) PerformSoftReset(ctx context.Context) error {
 
 	// 3. Run a fresh TLS client handshake over the new layer.
 	newAdapter := reliable.NewAdapter(newLayer, s.transport.LocalAddr(), s.transport.RemoteAddr())
-	newTLS := tls.Client(newAdapter, s.tlsConfig)
+	newTLS := control.NewTLSClient(newAdapter, s.tlsConfig)
 	if err := newTLS.HandshakeContext(ctx); err != nil {
 		s.retireLayer(newKID)
 		return fmt.Errorf("rekey: TLS handshake: %w", err)
@@ -206,25 +205,26 @@ func (m *rekeyManager) PerformSoftReset(ctx context.Context) error {
 		s.retireLayer(newKID)
 		return fmt.Errorf("rekey: write KEY_METHOD 2: %w", err)
 	}
-	// Erase the pre_master copies (struct + marshalled wire buffer) — see
-	// the same pattern in control.Run().
-	clear(clientKM.PreMaster[:])
+	// Keep pre_master until PRF derivation; erase the transmitted copy now.
+	defer clear(clientKM.PreMaster[:])
 	clear(cmBytes)
-	if _, err := control.ReadKeyMethod2(newTLS, true, false); err != nil {
+	serverKM, err := control.ReadKeyMethod2(newTLS, true, false)
+	if err != nil {
 		_ = newTLS.Close()
 		s.retireLayer(newKID)
 		return fmt.Errorf("rekey: read server KEY_METHOD 2: %w", err)
 	}
 
-	// 5. Derive new data-channel keys via TLS-EKM on the new TLS session.
+	// 5. Preserve the initial session's negotiated derivation on rekey.
 	cs := newTLS.ConnectionState()
-	mat, err := cs.ExportKeyingMaterial(control.ExportLabel, nil, control.DataKeyMaterialLen)
+	remoteSID, _ := newLayer.RemoteSessionID()
+	mat, err := control.DeriveNegotiatedKeys(cs, s.pushReply.Raw, &clientKM, &serverKM, s.localSID, remoteSID)
 	if err != nil {
 		_ = newTLS.Close()
 		s.retireLayer(newKID)
-		return fmt.Errorf("rekey: TLS-EKM: %w", err)
+		return fmt.Errorf("rekey: key derivation: %w", err)
 	}
-	defer clear(mat)
+	defer clear(mat[:])
 	keyLen, err := control.AEADKeyLen(s.cipher)
 	if err != nil {
 		_ = newTLS.Close()

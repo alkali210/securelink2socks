@@ -35,7 +35,7 @@ func TestInvalidRuleInvalidatesWholeSnapshot(t *testing.T) {
 	valid := "app [addr:192.0.2.1/32][proto:any] [port:any],"
 	for _, rule := range []string{
 		"app", "app [addr:nope][proto:any] [port:any]", "app [addr:192.0.2.1/33][proto:any] [port:any]",
-		"app [addr:192.0.2.1/32][proto:tcp] [port:443]", "app [addr:192.0.2.1/32][proto:udp] [port:any]",
+		"app [addr:192.0.2.1/32][proto:udp] [port:any]",
 		"app [addr:192.0.2.1/32][proto:unknown] [port:any]", "app [addr:192.0.2.1/32][proto:any] [port:0]",
 		"app [addr:192.0.2.1/32][proto:any] [port:65536]", "app [addr:192.0.2.1/32][proto:any] [port:80-90]",
 		"app [addr:192.0.2.1/32][proto:any] [port:+80]", "app [addr:::1/128][proto:any] [port:any]",
@@ -43,6 +43,37 @@ func TestInvalidRuleInvalidatesWholeSnapshot(t *testing.T) {
 	} {
 		if s, err := ParsePush(valid + rule); err == nil || s != nil {
 			t.Errorf("accepted %q", rule)
+		}
+	}
+}
+
+func TestLiveGrammarWithSyntheticAddresses(t *testing.T) {
+	fixture, err := os.ReadFile("../../testdata/securelink/app-live-shape.push.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed, err := ParsePush(string(fixture)); err != nil || parsed.Len() != 3 {
+		t.Fatal("live-shape fixture rejected")
+	}
+	s, err := ParsePush("app [addr:192.0.2.10/32][proto:tcp port:443;8443],app [domain:example.invalid][proto:any port:any],app [addr:198.51.100.0/24][proto:any port:22]")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		target string
+		allow  bool
+	}{
+		{"192.0.2.10:443", true}, {"192.0.2.10:8443", true}, {"192.0.2.10:80", false},
+		{"192.0.2.11:443", false}, {"198.51.100.20:22", true}, {"198.51.100.20:443", false},
+		{"203.0.113.1:443", false},
+	} {
+		if s.AllowsTCP(netip.MustParseAddrPort(tc.target)) != tc.allow {
+			t.Errorf("wrong decision for %s", tc.target)
+		}
+	}
+	for _, ports := range []string{"443;", ";443", "443;;8443", "any;443", "443;0", "443;65536", "443;80-90"} {
+		if s, err := ParsePush("app [addr:192.0.2.10/32][proto:tcp port:" + ports + "]"); err == nil || s != nil {
+			t.Fatal("accepted malformed list")
 		}
 	}
 }

@@ -10,10 +10,14 @@ import (
 	"github.com/n0madic/go-openvpn/pkg/ovpn"
 )
 
-// ParseAEADProbe is an explicit compatibility experiment, not normal profile
-// normalization. The original profile remains unchanged. It advertises only
-// implemented AEAD ciphers and never falls back to CBC or unauthenticated TLS.
+// ParseAEADProbe is retained for the diagnostic CLI's existing flag.
 func (p Profile) ParseAEADProbe() (*ovpn.Parsed, error) {
+	return p.ParseXMU()
+}
+
+// ParseXMU applies the CA/serverAuth and AEAD policy verified against XMU on
+// 2026-09-24. The original profile is unchanged; CBC is never advertised.
+func (p Profile) ParseXMU() (*ovpn.Parsed, error) {
 	// The authenticated XMU API supplies the trust anchor. For profiles using
 	// OpenVPN's CA + server-role identity policy, require both inline CA and the
 	// explicit role directive before allowing a missing hostname constraint.

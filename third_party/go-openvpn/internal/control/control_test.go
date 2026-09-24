@@ -117,7 +117,7 @@ func TestRunFullHandshake(t *testing.T) {
 	cert, pool := genSelfSignedCert(t)
 
 	// Server simulator in a goroutine.
-	const pushReply = "PUSH_REPLY,ifconfig 10.8.0.6 255.255.255.0,topology subnet,peer-id 42,cipher AES-256-GCM,tun-mtu 1500,ping 10,ping-restart 60,route-gateway 10.8.0.1"
+	const pushReply = "PUSH_REPLY,key-derivation tls-ekm,ifconfig 10.8.0.6 255.255.255.0,topology subnet,peer-id 42,cipher AES-256-GCM,tun-mtu 1500,ping 10,ping-restart 60,route-gateway 10.8.0.1"
 
 	var serverErr error
 	var serverEKM [256]byte
@@ -210,7 +210,7 @@ func TestRunEmitsTracerEvents(t *testing.T) {
 	(&pumper{layer: serverLayer, tr: sTr, wrap: serverWrap}).run(ctx, t)
 
 	cert, pool := genSelfSignedCert(t)
-	const pushReply = "PUSH_REPLY,ifconfig 10.8.0.7 255.255.255.0,topology subnet,peer-id 17,cipher AES-256-GCM,tun-mtu 1500,ping 10,ping-restart 60,route-gateway 10.8.0.1"
+	const pushReply = "PUSH_REPLY,key-derivation tls-ekm,ifconfig 10.8.0.7 255.255.255.0,topology subnet,peer-id 17,cipher AES-256-GCM,tun-mtu 1500,ping 10,ping-restart 60,route-gateway 10.8.0.1"
 
 	var wg sync.WaitGroup
 	wg.Go(func() {

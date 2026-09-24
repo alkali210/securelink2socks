@@ -26,7 +26,7 @@ const usage = `securelink2socks — XMU userspace gateway (compatibility stage)
 Usage:
   securelink2socks login              Browser SSO / reuse or refresh session
   securelink2socks check              Authenticate, fetch config, check handshake/ACL
-  securelink2socks check --aead-probe  Explicit AEAD-only TLS compatibility experiment
+  securelink2socks check --aead-probe  Compatibility alias for the verified AEAD policy
   securelink2socks probe IPv4:port    Also attempt an ACL-authorized TCP handshake
 
 All network commands require SECURELINK2SOCKS_E2E=1 during this stage.
@@ -114,7 +114,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	}
 	var report tunnel.Report
 	if aeadProbe {
-		fmt.Fprintln(out, "AEAD-only experiment: using profile CA + serverAuth verification; no CBC fallback.")
+		fmt.Fprintln(out, "AEAD policy: using profile CA + serverAuth verification; no CBC fallback.")
 		report, err = tunnel.CheckAEAD(ctx, profile)
 	} else {
 		report, err = tunnel.Check(ctx, profile, target)

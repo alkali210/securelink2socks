@@ -121,65 +121,55 @@ does the same on rekey. The dependency test verifies all 17 values survive the
 profile parser. No manual peer-info injection, log scraping or native plugin is
 required.
 
-### Compatibility gates still open
+### Verified XMU compatibility (2026-09-24)
 
-1. The **actual negotiated cipher is unknown**. Upstream supports only
-   AES-128-GCM, AES-256-GCM and CHACHA20-POLY1305. This port does not append the
-   Rust reference's CBC-inclusive cipher list or strip server-advertised CBC.
-2. Upstream requires protected control channel (`tls-auth`, `tls-crypt` or
-   `tls-crypt-v2`). Real clientConf must be checked for this.
-3. Upstream requires server identity verification. Profiles with only numeric
-   remotes and no verify-x509-name are rejected. No insecure bypass is enabled.
-4. Real transport, selected remote and pushed IPv4 are unknown. The `check`
-   command can report them without dumping sensitive configuration.
+Real API login/refresh/config, verified TLS, AES-128-GCM, assigned IPv4 and
+structured ACL acquisition now work. XMU uses ordinary outer control framing
+(no tls-auth/tls-crypt), with inner TLS verified against profile CA and explicit
+serverAuth EKU. The CLI applies this verified AEAD-only policy by default.
 
-The Rust executable was not run. Source inspection shows it embeds Windows
-administrator elevation and creates a native adapter/routes, and debug builds
-automatically run endpoint probes. Its required VCPKG_ROOT was also absent.
-Running it as an unexamined baseline would contradict this project's no-host-
-network-mutation boundary. A separately controlled baseline remains outstanding.
+Three interoperability defects were established: adaptive Go TLS records split
+KEY_METHOD 2 peer-info; PUSH configuration arrives in continuation bundles;
+and this gateway uses OpenVPN PRF rather than TLS-EKM for AEAD key derivation.
+After correcting them, 14 authenticated gateway keepalives were received in
+15 seconds with zero AEAD-open failures. See live-validation.md for limits.
+
+The Rust executable was not run: its entry point elevates and modifies host
+adapters/routes. References were used as source material outside this repository.
 
 ## Structured ACL acquisition
 
-Upstream's **internal** `proto.PushReply.Raw` already preserves unknown options,
-but its **public** `openvpn.PushReply` and `Client.PushedOptions()` omit Raw.
-The local patch exposes the preserved string. Reconnect callbacks are built
-from PushedOptions, so they receive it too. No log parsing is used.
+The public PushReply.Raw preserves the fully assembled PUSH body. The app layer
+parses it directly, without scraping human-readable logs. Observed raw syntax:
 
-The Rust reference documents these log-rendered forms:
-
-```text
-[app] [[addr:<IPv4>/32][proto:any] [port:any]]
-[app] [[addr:<IPv4>/32][proto:any] [port:21]]
-[app] [[addr:<IPv4>/30][proto:any] [port:any]]
+```
+app [addr:<IPv4 CIDR>][proto:any port:any]
+app [addr:<IPv4 CIDR>][proto:tcp port:<decimal>;<decimal>]
+app [domain:<domain>][proto:any port:<decimal>]
 ```
 
-The parser currently accepts the candidate raw option
-`app [addr:<prefix>][proto:any] [port:<any-or-single-port>]`.
-The surrounding log renderer brackets/index are **not** accepted. This raw
-serialization is a hypothesis from the documented option structure, not an
-observed wire capture. A live raw sample is required before service readiness.
-Unknown protocols, port lists/ranges, trailing fields, malformed addresses and
-invalid ports invalidate the whole snapshot. Empty ACL denies everything.
-Prefixes are normalized, duplicate rules removed, and fields are private so a
-published snapshot cannot be mutated by callers. Runtime atomic replacement
-and active-connection termination belong to the later supervisor stage.
+TCP/any rules support decimal single ports and semicolon lists; domain entries
+never grant IPv4 access and never trigger DNS. Unknown/malformed app syntax,
+unknown protocols and port ranges invalidate the snapshot. Empty ACL denies
+traffic. Prefixes normalize and individual prefix/port grants deduplicate; the
+observed account produced 66 grants. This count need not match raw app entries.
+The older separated-bracket reference fixtures remain supported.
 
-Upstream splits PUSH_REPLY on commas; PUSH continuation and additional control
-updates need real endpoint evidence. Raw pushes may contain auth tokens, so the
-diagnostic does not print or persist Raw. Future ACL diagnostics must select and
-sanitize app fields rather than dump the control message.
+PUSH fragments are bounded and combined before ACL publication. Runtime PUSH
+updates, atomic snapshot replacement and connection revocation remain future
+service work. Raw PUSH may contain tokens and is never printed or persisted.
 
 ## Status against milestones
 
 | Milestone | Status |
 | --- | --- |
-| 0 bootstrap/investigation | Module/licenses/pins/API map/Raw strategy/UV path done; live cipher and baseline outstanding |
-| 1 control plane | Offline implementation and tests done; real login/refresh/config acceptance outstanding |
-| 2 profile/handshake | Profile and opt-in check command implemented; real handshake outstanding |
-| 3 ACL | Narrow documented-field parser and tests done; real nonempty snapshot outstanding |
-| 4 userspace TCP | Opt-in ACL-gated netstack probe implemented; real reachability proof outstanding |
-| 5–7 SOCKS/lifecycle/Mihomo | Deferred per plan until real-XMU gates pass |
-| Performance | Not measured; no 100 Mbps claim |
+| 0 investigation | Actual AEAD/transport and raw ACL/UV path verified; native baseline not run |
+| 1 control plane | Real login, refresh and config verified |
+| 2 profile/handshake | TLS, authentication, AES-128-GCM, IPv4 and AEAD keepalive verified |
+| 3 ACL | Real nonempty structured snapshot verified |
+| 4 userspace TCP | Netstack probe implemented; no authorized known target available |
+| 5–7 SOCKS/lifecycle/Mihomo | Deferred by milestone 4's TCP proof requirement |
+| Performance | Not measured |
 
-No session, unsanitized profile or live fixture has been created or committed.
+No credential or raw live profile/PUSH fixture is committed. Local cached user
+sessions are used only by explicitly enabled live diagnostics.
