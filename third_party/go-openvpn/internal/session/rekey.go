@@ -317,15 +317,19 @@ func buildRekeyClientKM(s *Session) (proto.KeyMethod2, error) {
 	if ciphersStr == "" {
 		ciphersStr = "AES-256-GCM:CHACHA20-POLY1305:AES-128-GCM"
 	}
+	keyBytes, err := control.AEADKeyLen(firstColonField(ciphersStr))
+	if err != nil {
+		return km, err
+	}
 	km.Options = strings.Join([]string{
 		"V4",
 		"dev-type tun",
 		"link-mtu 1559",
 		"tun-mtu 1500",
-		"proto UDPv4",
+		"proto " + optionsProto(s.cfg.Network, s.cfg.RemoteAddr),
 		"cipher " + firstColonField(ciphersStr),
 		"auth SHA256",
-		"keysize 256",
+		fmt.Sprintf("keysize %d", keyBytes*8),
 		"key-method 2",
 		"tls-client",
 	}, ",")

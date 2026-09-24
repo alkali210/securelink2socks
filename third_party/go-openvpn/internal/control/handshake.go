@@ -233,6 +233,8 @@ func Run(ctx context.Context, layer *reliable.Layer, localAddr, remoteAddr net.A
 // (mostly cosmetic) OCC consistency check. Most directives are overridden by
 // NCP+PUSH_REPLY anyway; the server logs but doesn't reject on mismatch.
 func buildOptionsString(ciphers, proto string) string {
+	cipher := firstCipher(ciphers)
+	keyBytes, _ := AEADKeyLen(cipher)
 	return strings.Join([]string{
 		"V4",
 		"dev-type tun",
@@ -241,9 +243,9 @@ func buildOptionsString(ciphers, proto string) string {
 		"proto " + proto,
 		// "cipher" must name one of the IV_CIPHERS list; the server
 		// updates it via PUSH_REPLY anyway.
-		"cipher " + firstCipher(ciphers),
+		"cipher " + cipher,
 		"auth SHA256",
-		"keysize 256",
+		fmt.Sprintf("keysize %d", keyBytes*8),
 		"key-method 2",
 		"tls-client",
 	}, ",")

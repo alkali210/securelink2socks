@@ -25,6 +25,7 @@ import (
 
 	"github.com/n0madic/go-openvpn/internal/control"
 	"github.com/n0madic/go-openvpn/internal/data"
+	"github.com/n0madic/go-openvpn/internal/plaincontrol"
 	"github.com/n0madic/go-openvpn/internal/proto"
 	"github.com/n0madic/go-openvpn/internal/reliable"
 	"github.com/n0madic/go-openvpn/internal/tlsauth"
@@ -65,9 +66,10 @@ type Config struct {
 	// TLSCryptV1 is a 256-byte tls-crypt static key; TLSCryptV2 is a
 	// PEM bundle with embedded WKc; TLSAuth is a 256-byte tls-auth static
 	// key (HMAC-only control-channel authentication).
-	TLSCryptV1 []byte
-	TLSCryptV2 []byte
-	TLSAuth    []byte
+	TLSCryptV1        []byte
+	TLSCryptV2        []byte
+	TLSAuth           []byte
+	AllowPlainControl bool
 
 	// Auth is the control-channel HMAC digest for tls-auth: "" (=SHA1,
 	// OpenVPN's default), "SHA256" or "SHA512". Ignored for tls-crypt v1/v2,
@@ -376,6 +378,7 @@ func DialWithTransport(ctx context.Context, cfg Config, tr transport.PacketConn)
 		Username:        cfg.Username,
 		Password:        cfg.Password,
 		Ciphers:         cfg.Ciphers,
+		Proto:           optionsProto(cfg.Network, cfg.RemoteAddr),
 		HardResetOpcode: hardResetOp,
 		PeerInfoVersion: cfg.PeerInfoVersion,
 		PeerInfoExtra:   cfg.PeerInfoExtra,
@@ -1386,6 +1389,18 @@ func (s *Session) tickLoop(layer *reliable.Layer) {
 
 // --- helpers ---
 
+func optionsProto(network, remote string) string {
+	family := "4"
+	host, _, _ := net.SplitHostPort(remote)
+	if ip := net.ParseIP(host); ip != nil && ip.To4() == nil {
+		family = "6"
+	}
+	if strings.HasPrefix(network, "tcp") {
+		return "TCPv" + family + "_CLIENT"
+	}
+	return "UDPv" + family
+}
+
 // validateConfig checks the requirements common to every entry point.
 // Network/RemoteAddr are intentionally NOT checked here — they are only
 // needed by Dial's built-in transport dial and are validated there, so
@@ -1404,13 +1419,16 @@ func validateConfig(cfg *Config) error {
 	if len(cfg.TLSAuth) > 0 {
 		set++
 	}
-	if set != 1 {
+	if set != 1 && !(set == 0 && cfg.AllowPlainControl) {
 		return errors.New("session: exactly one control-channel key required (tls-crypt v1, tls-crypt-v2 or tls-auth)")
 	}
 	return nil
 }
 
 func buildWrapper(cfg Config) (controlWrapper, proto.Opcode, error) {
+	if cfg.AllowPlainControl && len(cfg.TLSAuth) == 0 && len(cfg.TLSCryptV1) == 0 && len(cfg.TLSCryptV2) == 0 {
+		return plaincontrol.Wrapper{}, proto.PControlHardResetClientV2, nil
+	}
 	if len(cfg.TLSAuth) > 0 {
 		rawKey, err := tlscrypt.ParseStaticKey(cfg.TLSAuth)
 		if err != nil {

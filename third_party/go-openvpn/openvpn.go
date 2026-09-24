@@ -212,6 +212,12 @@ type Config struct {
 	// is selected by Auth.
 	TLSAuth []byte
 
+	// AllowPlainControl permits TLS control packets without an additional
+	// tls-auth/tls-crypt wrapper when no static key is configured. Inner TLS
+	// certificate verification and data-channel encryption are still required.
+	// This is explicit opt-in; no automatic fallback occurs after a failure.
+	AllowPlainControl bool
+
 	// Auth is the tls-auth control-channel HMAC digest: "" (=SHA1, OpenVPN's
 	// default when `auth` is unset), "SHA256" or "SHA512". Ignored for
 	// tls-crypt v1/v2 (which always use HMAC-SHA256).
@@ -691,23 +697,24 @@ func Dial(ctx context.Context, cfg *Config) (*Client, error) {
 // sessionCfg projects the public Config onto the internal session.Config.
 func sessionCfg(cfg *Config) session.Config {
 	return session.Config{
-		Network:          cfg.Network,
-		RemoteAddr:       cfg.RemoteAddr,
-		TLSConfig:        cfg.TLSConfig,
-		Username:         cfg.Username,
-		Password:         cfg.Password,
-		TLSCryptV1:       cfg.TLSCryptV1,
-		TLSCryptV2:       cfg.TLSCryptV2,
-		TLSAuth:          cfg.TLSAuth,
-		Auth:             cfg.Auth,
-		KeyDirection:     cfg.KeyDirection,
-		PeerInfoExtra:    cfg.PeerInfoExtra,
-		Ciphers:          cfg.Ciphers,
-		HandshakeTimeout: cfg.HandshakeTimeout,
-		Reneg:            cfg.Reneg,
-		PeerInfoVersion:  cfg.PeerInfoVersion,
-		HandshakeTracer:  cfg.HandshakeTracer,
-		Logger:           cfg.Logger,
+		Network:           cfg.Network,
+		RemoteAddr:        cfg.RemoteAddr,
+		TLSConfig:         cfg.TLSConfig,
+		Username:          cfg.Username,
+		Password:          cfg.Password,
+		TLSCryptV1:        cfg.TLSCryptV1,
+		TLSCryptV2:        cfg.TLSCryptV2,
+		TLSAuth:           cfg.TLSAuth,
+		AllowPlainControl: cfg.AllowPlainControl,
+		Auth:              cfg.Auth,
+		KeyDirection:      cfg.KeyDirection,
+		PeerInfoExtra:     cfg.PeerInfoExtra,
+		Ciphers:           cfg.Ciphers,
+		HandshakeTimeout:  cfg.HandshakeTimeout,
+		Reneg:             cfg.Reneg,
+		PeerInfoVersion:   cfg.PeerInfoVersion,
+		HandshakeTracer:   cfg.HandshakeTracer,
+		Logger:            cfg.Logger,
 	}
 }
 
@@ -727,7 +734,7 @@ func validateControlChannel(cfg *Config) error {
 		set++
 	}
 	switch {
-	case set == 0:
+	case set == 0 && !cfg.AllowPlainControl:
 		return errors.New("openvpn: a control-channel key is required (set one of TLSCryptV1, TLSCryptV2 or TLSAuth)")
 	case set > 1:
 		return errors.New("openvpn: only one control-channel key may be set (TLSCryptV1, TLSCryptV2 or TLSAuth)")

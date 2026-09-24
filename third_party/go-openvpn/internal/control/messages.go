@@ -144,9 +144,16 @@ func ReadControlMessage(r io.Reader) (string, error) {
 
 // WriteControlMessage writes s followed by a NUL byte.
 func WriteControlMessage(w io.Writer, s string) error {
-	if _, err := w.Write([]byte(s)); err != nil {
-		return err
+	// OpenVPN extracts NUL-delimited commands from each decrypted record.
+	// Writing the terminator separately makes a separate TLS record and can
+	// cause the peer to discard the unterminated command.
+	if len(s) > MaxControlMessageLen {
+		return errors.New("control: text message too long")
 	}
-	_, err := w.Write([]byte{0})
+	msg := append([]byte(s), 0)
+	n, err := w.Write(msg)
+	if err == nil && n != len(msg) {
+		return io.ErrShortWrite
+	}
 	return err
 }

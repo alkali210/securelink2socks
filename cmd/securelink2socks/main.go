@@ -26,6 +26,7 @@ const usage = `securelink2socks — XMU userspace gateway (compatibility stage)
 Usage:
   securelink2socks login              Browser SSO / reuse or refresh session
   securelink2socks check              Authenticate, fetch config, check handshake/ACL
+  securelink2socks check --aead-probe  Explicit AEAD-only TLS compatibility experiment
   securelink2socks probe IPv4:port    Also attempt an ACL-authorized TCP handshake
 
 All network commands require SECURELINK2SOCKS_E2E=1 during this stage.
@@ -51,9 +52,10 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		return err
 	}
 	var target netip.AddrPort
+	aeadProbe := len(args) == 2 && args[0] == "check" && args[1] == "--aead-probe"
 	switch args[0] {
 	case "login", "check":
-		if len(args) != 1 {
+		if len(args) != 1 && !aeadProbe {
 			return errors.New("unexpected arguments; use --help")
 		}
 	case "probe":
@@ -110,8 +112,33 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	report, err := tunnel.Check(ctx, profile, target)
-	if report.IPv4 != "" {
+	var report tunnel.Report
+	if aeadProbe {
+		fmt.Fprintln(out, "AEAD-only experiment: using profile CA + serverAuth verification; no CBC fallback.")
+		report, err = tunnel.CheckAEAD(ctx, profile)
+	} else {
+		report, err = tunnel.Check(ctx, profile, target)
+	}
+	if errors.Is(err, tunnel.ErrVPNAuthRejected) {
+		fmt.Fprintln(out, "VPN authentication rejected; refreshing SecureLink session once...")
+		if err = c.EnsureSession(ctx, true); err != nil {
+			return err
+		}
+		config, err = c.VPNConfig(ctx)
+		if err != nil {
+			return err
+		}
+		profile, err = c.Profile(config)
+		if err != nil {
+			return err
+		}
+		if aeadProbe {
+			report, err = tunnel.CheckAEAD(ctx, profile)
+		} else {
+			report, err = tunnel.Check(ctx, profile, target)
+		}
+	}
+	if report.IPv4 != "" || report.Stage != "" {
 		if e := json.NewEncoder(out).Encode(report); e != nil {
 			return e
 		}

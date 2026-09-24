@@ -98,6 +98,9 @@ type Parsed struct {
 
 // ParseOptions tweaks parser behavior.
 type ParseOptions struct {
+	// AllowPlainControl permits profiles using TLS without tls-auth/tls-crypt.
+	// It does not relax certificate validation or data-cipher requirements.
+	AllowPlainControl bool
 	// BaseDir is the directory to resolve relative file references against
 	// (`ca myCa.pem`, `tls-crypt ta.key`, etc.). Defaults to the directory
 	// containing the source file when ParseFile is used; "." otherwise.
@@ -870,7 +873,7 @@ func (s *parseState) finalize() (*Parsed, error) {
 		}
 	}
 	switch {
-	case ctrlKeys == 0:
+	case ctrlKeys == 0 && !s.opt.AllowPlainControl:
 		return nil, errors.New("missing control-channel protection: provide tls-crypt, tls-crypt-v2 or tls-auth (this library requires a protected control channel)")
 	case ctrlKeys > 1:
 		return nil, errors.New("multiple control-channel keys set; use exactly one of tls-crypt, tls-crypt-v2 or tls-auth")
@@ -1009,20 +1012,21 @@ func (s *parseState) finalize() (*Parsed, error) {
 	}
 
 	cfg := &openvpn.Config{
-		Network:       network,
-		RemoteAddr:    picked.Addr(),
-		TLSConfig:     tlsCfg,
-		TLSCryptV1:    s.tlsCrypt,
-		TLSCryptV2:    s.tlsCV2,
-		TLSAuth:       s.tlsAuth,
-		Auth:          s.authDigest,
-		KeyDirection:  keyDir,
-		PeerInfoExtra: s.peerInfoExtra,
-		Ciphers:       ciphers,
-		Reneg:         s.reneg,
-		Username:      s.opt.Username,
-		Password:      s.opt.Password,
-		Scramble:      s.scramble,
+		Network:           network,
+		RemoteAddr:        picked.Addr(),
+		TLSConfig:         tlsCfg,
+		TLSCryptV1:        s.tlsCrypt,
+		TLSCryptV2:        s.tlsCV2,
+		TLSAuth:           s.tlsAuth,
+		AllowPlainControl: ctrlKeys == 0 && s.opt.AllowPlainControl,
+		Auth:              s.authDigest,
+		KeyDirection:      keyDir,
+		PeerInfoExtra:     s.peerInfoExtra,
+		Ciphers:           ciphers,
+		Reneg:             s.reneg,
+		Username:          s.opt.Username,
+		Password:          s.opt.Password,
+		Scramble:          s.scramble,
 	}
 
 	return &Parsed{

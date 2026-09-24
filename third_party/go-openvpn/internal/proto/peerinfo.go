@@ -63,7 +63,21 @@ func NewPeerInfo(version, platform string, ivProto int, ciphers string, mtu int)
 // DefaultPeerInfo returns a PeerInfo pre-populated with sensible defaults for
 // this build of the library.
 func DefaultPeerInfo(ciphers string) *PeerInfo {
-	return NewPeerInfo("2.6.0", runtime.GOOS, DefaultClientIVProto, ciphers, 1500)
+	pi := NewPeerInfo("2.6.0", platformName(runtime.GOOS), DefaultClientIVProto, ciphers, 1500)
+	// The AEAD replay window accepts non-linear packet IDs over TCP too.
+	pi.Set("IV_TCPNL", "1")
+	return pi
+}
+
+func platformName(goos string) string {
+	switch goos {
+	case "windows":
+		return "win"
+	case "darwin":
+		return "mac"
+	default:
+		return goos
+	}
 }
 
 // Set adds or overrides a peer-info field. Empty value is allowed.

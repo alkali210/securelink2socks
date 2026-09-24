@@ -9,7 +9,7 @@ private key material, credentials, and data-plane implementation are not used.
 third_party/go-openvpn contains the root module Go sources and pkg/ovpn from
 github.com/n0madic/go-openvpn, revision
 12597991e31263f9309a6589dfd63a304349bafc (AGPL-3.0-or-later).
-Changes: expose the existing internal PushReply.Raw field in the public
-PushReply and PushedOptions conversion; extract a private conversion helper
-and add a regression test. See docs/upstream-patch.md.
+Changes: expose raw PUSH options; add opt-in plain outer control framing;
+correct control-message TLS record boundaries, transport/key-size options,
+and platform peer-info; add regression tests. See docs/upstream-patch.md.
 The upstream license and copyright notices are preserved.

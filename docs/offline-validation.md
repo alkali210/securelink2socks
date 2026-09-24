@@ -1,6 +1,7 @@
 # Offline validation — 2026-09-24
 
-Environment: Windows/amd64, Go 1.26.4. No real XMU requests were made.
+Environment: Windows/amd64, Go 1.26.4. This records the initial offline phase;
+subsequent authorized real XMU requests are recorded in live-validation.md.
 
 | Check | Result |
 | --- | --- |
@@ -29,7 +30,7 @@ encountered Windows sandbox/cache access failures. No upstream protocol logic
 was changed to mask the failures. The complete default-parallel suite cannot
 therefore be claimed consistently green in this environment.
 
-Pending live evidence: real login/refresh/config, negotiated transport/cipher,
+Initially pending live evidence: real login/refresh/config, negotiated transport/cipher,
 server identity/control protection, exact raw app grammar, nonempty ACL, real
 authorized TCP reachability and host-network invariance. SOCKS, reconnect,
 Mihomo acceptance and throughput measurements have not yet been implemented or

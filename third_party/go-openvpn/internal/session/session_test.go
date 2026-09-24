@@ -21,6 +21,7 @@ import (
 
 	"github.com/n0madic/go-openvpn/internal/control"
 	"github.com/n0madic/go-openvpn/internal/data"
+	"github.com/n0madic/go-openvpn/internal/plaincontrol"
 	"github.com/n0madic/go-openvpn/internal/proto"
 	"github.com/n0madic/go-openvpn/internal/reliable"
 	"github.com/n0madic/go-openvpn/internal/session"
@@ -49,6 +50,8 @@ func TestFirstPingChaCha20(t *testing.T) { runPingWithCipher(t, "CHACHA20-POLY13
 
 // TestFirstPingAES128GCM exercises the smaller-key AEAD variant.
 func TestFirstPingAES128GCM(t *testing.T) { runPingWithCipher(t, "AES-128-GCM") }
+
+func TestFirstPingPlainTLS(t *testing.T) { runPingWithCipher(t, "AES-256-GCM", true) }
 
 // TestDialWithTransportNoNetworkHint verifies that DialWithTransport works
 // when Network and RemoteAddr are empty. That is the injected-transport
@@ -288,7 +291,7 @@ func TestFirstPingTLSCryptV2(t *testing.T) {
 	}
 }
 
-func runPingWithCipher(t *testing.T, cipher string) {
+func runPingWithCipher(t *testing.T, cipher string, plain ...bool) {
 	t.Parallel()
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
@@ -310,9 +313,14 @@ func runPingWithCipher(t *testing.T, cipher string) {
 
 	// Server simulator: full handshake + AEAD echo loop.
 	const peerID = uint32(42)
+	var wrapper controlWrap = serverWrap
+	plainMode := len(plain) > 0 && plain[0]
+	if plainMode {
+		wrapper = plaincontrol.Wrapper{}
+	}
 	serverErrCh := make(chan error, 1)
 	go func() {
-		serverErrCh <- runServerWithDataEcho(ctx, sTr, serverWrap, cert, peerID, cipher, t)
+		serverErrCh <- runServerWithDataEcho(ctx, sTr, wrapper, cert, peerID, cipher, t)
 	}()
 
 	// Client session — advertise all three ciphers in priority order; server
@@ -327,6 +335,10 @@ func runPingWithCipher(t *testing.T, cipher string) {
 		},
 		TLSCryptV1: staticKey[:],
 		Ciphers:    []string{"AES-256-GCM", "CHACHA20-POLY1305", "AES-128-GCM"},
+	}
+	if plainMode {
+		cfg.TLSCryptV1 = nil
+		cfg.AllowPlainControl = true
 	}
 	sess, err := session.DialWithTransport(ctx, cfg, cTr)
 	if err != nil {

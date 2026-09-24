@@ -14,10 +14,27 @@ Production delta:
    the `PUSH_REPLY,` prefix and trailing NUL.
 2. Copy internal `proto.PushReply.Raw` into that field in PushedOptions.
 3. Extract the conversion into private `publicPushReply` for a regression test.
+4. Add explicit `AllowPlainControl` config/parser opt-in for OpenVPN control
+   framing without tls-auth/tls-crypt. Default parsing still rejects missing
+   control protection. The inner TLS certificate policy is independent.
+5. Write each NUL-terminated control command with one TLS Write, so native
+   OpenVPN's per-record command reader sees a complete command.
+6. Advertise the actual TCP/UDP transport and cipher key size in both initial
+   and rekey option strings, instead of always UDPv4 and 256 bits.
+7. Use native OpenVPN platform names (`win`/`mac`) and advertise `IV_TCPNL=1`,
+   consistent with the existing AEAD replay window.
 
 `raw_push_test.go` verifies that an unknown `app` option survives the internal
-parser, public conversion and reconnect callback dispatch. The wire protocol,
-cipher policy, peer-info, sessions and netstack behavior are unchanged.
+parser, public conversion and reconnect callback dispatch. Additional tests
+cover plain-control golden bytes, opt-in validation, an in-memory TLS/AEAD ping,
+TLS command record boundaries, transport/key-size options and platform names.
+These tests do not prove XMU accepts AEAD or that its raw ACL is compatible.
+
+Protocol references used for these corrections:
+- [OpenVPN control packet format](https://build.openvpn.net/doxygen/network_protocol.html)
+- [OpenVPN 2.6.14 control message reader](https://github.com/OpenVPN/openvpn/blob/v2.6.14/src/openvpn/forward.c)
+- [OpenVPN 2.6.14 options string](https://github.com/OpenVPN/openvpn/blob/v2.6.14/src/openvpn/options.c)
+- [OpenVPN 2.6.14 peer info](https://github.com/OpenVPN/openvpn/blob/v2.6.14/src/openvpn/ssl.c)
 
 Run the dependency tests separately because `go test ./...` at the repository
 root does not descend into nested Go modules:
