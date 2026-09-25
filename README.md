@@ -24,6 +24,16 @@ SOCKS 支持 IPv4 和域名 TCP CONNECT。域名仅经当前 VPN 下发的 DNS �
 
 2026-09-25 已通过用户的 9090 内核验证：普通公网 200，已知校内服务完整跳转到统一认证登录页 200，`ip.xmu.edu.cn` 页面及 IPv4 检测接口 200，接口返回 `is_in_xmu: true`。验证记录见 [实机记录](docs/live-validation.md)。IPv6 请求返回 `0x08`，BIND/UDP 返回 `0x07`；未就绪返回 `0x03`，ACL 拒绝返回 `0x02`。
 
+FlClash 导入本地 YAML 后可能保存独立副本；仓库文件更新不会自动更新导入副本。遇到统一认证页 TLS EOF 时，确认实际应用的规则中 `DOMAIN,ids.xmu.edu.cn,DIRECT` 位于校园域名规则之前。
+
+测试有登录跳转的网站应使用携带 Cookie 的 GET，不能仅凭 `curl -LI` 判断网站失败。Windows 示例（`NUL` 丢弃 Cookie 文件和响应正文）：
+
+```powershell
+curl.exe -sS -L --max-time 30 --cookie-jar NUL -A "Mozilla/5.0" --proxy http://127.0.0.1:7890 -o NUL -w "HTTP %{http_code}\n" https://lnt.xmu.edu.cn/
+```
+
+该命令已对 `lnt.xmu.edu.cn` 和给定校内 IP 验证到登录页 200。`-c/--cookie-jar` 会开启 curl 的 Cookie 引擎，参见 [curl Cookie 文档](https://curl.se/docs/http-cookies.html)。尚未验证提交登录后的业务页面。
+
 可用 `SECURELINK2SOCKS_LISTEN=127.0.0.1:其他端口` 更改端口，不能绑定其他地址。遇到 `NeedsLogin`，在同一会话目录的另一终端执行 `login --force`；服务等待会话文件更新后恢复，不反复请求失败的认证。
 
 ## 已实现

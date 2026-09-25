@@ -199,3 +199,27 @@ The detector simultaneously returned HTTP 200 and `is_in_xmu: true` on both
 paths. The original Clash profile was restored and test VPN processes stopped.
 Both the rebuilt executable and updated YAML are needed; a running old process
 does not acquire domain support when only the YAML is replaced.
+
+### Imported-profile drift and cookie-aware browser validation
+
+The user's later curl trace stopped at c-identity.xmu.edu.cn with HTTP 400 and
+`cookieNotFoundMessage`, before reaching ids.xmu.edu.cn. A HEAD redirect check
+without curl's cookie engine does not reproduce browser authentication flows.
+Using a CookieJar and GET allowed both lnt.xmu.edu.cn and the supplied campus
+IP to reach the unified login page with HTTP 200, via explicit proxy and TUN.
+
+The user's stored imported FlClash XMU profile retained the domain alias but
+was missing `DOMAIN,ids.xmu.edu.cn,DIRECT`, although the repository YAML already
+contained it. The imported copy was backed up locally and only the missing
+rule was inserted before the broad campus-domain rule. Its other settings
+were preserved. A fresh, isolated Firefox session using that repaired imported
+profile reached the actual unified-authentication form from both application
+URLs. No credentials were entered and no form was submitted.
+
+The exact README curl command (GET, redirects, cookie engine, normal browser
+User-Agent, explicit 7890 proxy, default certificate validation) then returned
+HTTP 200 with exit code 0 for both URLs. No Cookie values or session URLs are
+included in the committed report. Browser artifacts are locally ignored.
+As in the earlier tests, the original active core configuration was restored
+and temporary VPN/browser processes were stopped. The repaired stored XMU
+profile must be reapplied in FlClash when the user's SecureLink service is Ready.

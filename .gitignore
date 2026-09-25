@@ -8,3 +8,5 @@ session.json
 device_id
 *.ovpn
 !testdata/**/*.ovpn
+
+/output/playwright/
