@@ -223,3 +223,14 @@ included in the committed report. Browser artifacts are locally ignored.
 As in the earlier tests, the original active core configuration was restored
 and temporary VPN/browser processes were stopped. The repaired stored XMU
 profile must be reapplied in FlClash when the user's SecureLink service is Ready.
+
+
+## User acceptance and next phase — 2026-09-25
+
+The user confirmed that all functionality in the current stage was successfully
+validated. This supplements the recorded automated checks; it does not change
+their scope or imply long-duration, throughput, UDP, or IPv6 acceptance.
+
+The next candidate is ACL-driven Mihomo routing configuration generation.
+Scope and acceptance considerations are recorded in [the roadmap](roadmap.md).
+This documentation update does not implement that next phase.
