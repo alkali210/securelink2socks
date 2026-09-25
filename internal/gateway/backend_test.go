@@ -107,3 +107,32 @@ func TestReplacementCancelsInflightDial(t *testing.T) {
 		t.Fatal("dial not canceled")
 	}
 }
+
+// Domain lookups/dials must not survive replacement of their ACL generation.
+type domainTunnel struct {
+	*fakeTunnel
+	domainDial func(context.Context) (net.Conn, error)
+}
+
+func (f *domainTunnel) DialDomainContext(ctx context.Context, host string, port uint16) (net.Conn, error) {
+	return f.domainDial(ctx)
+}
+func TestReplacementCancelsDomainResolution(t *testing.T) {
+	b := &Backend{}
+	entered := make(chan struct{})
+	f := &domainTunnel{fakeTunnel: &fakeTunnel{done: make(chan struct{})}, domainDial: func(ctx context.Context) (net.Conn, error) { close(entered); <-ctx.Done(); return nil, ctx.Err() }}
+	b.Replace(f)
+	defer b.Replace(nil)
+	done := make(chan error, 1)
+	go func() { _, err := b.DialContext(t.Context(), "tcp4", "allowed.example:443"); done <- err }()
+	<-entered
+	b.Replace(nil)
+	select {
+	case err := <-done:
+		if !errors.Is(err, ErrUnavailable) {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("old DNS lookup not canceled")
+	}
+}

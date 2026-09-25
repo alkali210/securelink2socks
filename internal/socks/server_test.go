@@ -53,7 +53,7 @@ func TestRejectUnsupportedAndUnavailable(t *testing.T) {
 		ready   bool
 		code    byte
 	}{
-		{"domain", []byte{5, 1, 0, 3}, true, 8}, {"ipv6", []byte{5, 1, 0, 4}, true, 8},
+		{"empty domain", []byte{5, 1, 0, 3, 0}, true, 8}, {"ipv6", []byte{5, 1, 0, 4}, true, 8},
 		{"bind", []byte{5, 2, 0, 1}, true, 7}, {"udp", []byte{5, 3, 0, 1}, true, 7},
 		{"unavailable", []byte{5, 1, 0, 1, 192, 0, 2, 1, 1, 187}, false, 3},
 		{"invalid reserved", []byte{5, 1, 1, 1}, true, 1},
@@ -207,5 +207,24 @@ func TestTCPHalfClose(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("server did not stop")
+	}
+}
+
+func TestSOCKSDomainRequest(t *testing.T) {
+	b := &fakeBackend{ready: true, dial: func(_ context.Context, n, a string) (net.Conn, error) {
+		if n != "tcp4" || a != "allowed.example:443" {
+			t.Errorf("wrong domain target %s %s", n, a)
+		}
+		return nil, gateway.ErrDenied
+	}}
+	c, _ := startPipe(t, b)
+	negotiate(t, c)
+	name := "ALLOWED.EXAMPLE."
+	request := append([]byte{5, 1, 0, 3, byte(len(name))}, []byte(name)...)
+	request = append(request, 1, 187)
+	c.Write(request)
+	var response [10]byte
+	if _, err := io.ReadFull(c, response[:]); err != nil || response[1] != 2 || b.calls != 1 {
+		t.Fatal("domain handling failed", response, err)
 	}
 }

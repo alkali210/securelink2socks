@@ -6,7 +6,10 @@ import (
 	"errors"
 	"net"
 	"net/netip"
+	"strconv"
 	"sync"
+
+	"securelink2socks/internal/acl"
 )
 
 var ErrUnavailable = errors.New("VPN unavailable")
@@ -75,7 +78,25 @@ func (b *Backend) Replace(t Tunnel) {
 
 func (b *Backend) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	target, err := netip.ParseAddrPort(address)
-	if network != "tcp4" || err != nil || !target.Addr().Is4() || target.Port() == 0 {
+	var host string
+	var port uint64
+	if network != "tcp4" {
+		return nil, ErrDenied
+	}
+	domain := err != nil
+	if domain {
+		var rawPort string
+		host, rawPort, err = net.SplitHostPort(address)
+		if err != nil {
+			return nil, ErrDenied
+		}
+		var ok bool
+		host, ok = acl.CanonicalDomain(host)
+		port, err = strconv.ParseUint(rawPort, 10, 16)
+		if !ok || err != nil || port == 0 {
+			return nil, ErrDenied
+		}
+	} else if !target.Addr().Is4() || target.Port() == 0 {
 		return nil, ErrDenied
 	}
 	b.mu.Lock()
@@ -84,7 +105,7 @@ func (b *Backend) DialContext(ctx context.Context, network, address string) (net
 		b.mu.Unlock()
 		return nil, ErrUnavailable
 	}
-	if !g.tunnel.AllowsTCP(target) {
+	if !domain && !g.tunnel.AllowsTCP(target) {
 		b.mu.Unlock()
 		return nil, ErrDenied
 	}
@@ -93,7 +114,18 @@ func (b *Backend) DialContext(ctx context.Context, network, address string) (net
 	stop := context.AfterFunc(g.ctx, cancel)
 	defer cancel()
 	defer stop()
-	conn, err := g.tunnel.DialContext(dialCtx, "tcp4", target.String())
+	var conn net.Conn
+	if domain {
+		if dt, ok := g.tunnel.(interface {
+			DialDomainContext(context.Context, string, uint16) (net.Conn, error)
+		}); ok {
+			conn, err = dt.DialDomainContext(dialCtx, host, uint16(port))
+		} else {
+			err = ErrDenied
+		}
+	} else {
+		conn, err = g.tunnel.DialContext(dialCtx, "tcp4", target.String())
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.current != g || !alive(g.tunnel) || g.ctx.Err() != nil || ctx.Err() != nil {

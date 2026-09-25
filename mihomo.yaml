@@ -21,12 +21,12 @@ dns:
   direct-nameserver:
     - https://223.5.5.5/dns-query
 
-# 2026-09-25 查询的真实 A 记录。hosts 使 Mihomo 向 SOCKS 发送 IPv4。
-# 其他校园域名也需添加真实 IPv4；地址变更后需要更新。
-# 注意：hosts 不会增加 ACL 授权。检测站当前只有域名授权，程序会返回 0x02。
+# 校园域名直接交给 XMU SOCKS，由 VPN 内的 DNS 解析并核对 ACL。
+# 不要用 hosts 把仅有域名授权的目标改成 IP，否则会丢失域名授权信息。
+# 检测页的 IPv4 脚本与主页为同一服务，使用服务器授予的主页域名授权。
+# 这是域名别名，不是静态 IP；TLS 仍校验原始 ip4.xmu.edu.cn 主机名。
 hosts:
-  ip.xmu.edu.cn: 210.34.0.61
-  ip4.xmu.edu.cn: 210.34.0.61
+  ip4.xmu.edu.cn: ip.xmu.edu.cn
 
 proxies:
   - name: XMU
@@ -41,6 +41,8 @@ rules:
   - PROCESS-NAME,securelink2socks,DIRECT
   - DOMAIN,svpnlink.xmu.edu.cn,DIRECT
   - DOMAIN,svpnsso.xmu.edu.cn,DIRECT
+  # 校内应用跳转到的公网统一认证入口，不属于 VPN 数据资源。
+  - DOMAIN,ids.xmu.edu.cn,DIRECT
   - IP-CIDR,219.229.81.217/32,DIRECT,no-resolve
   - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
   # 校园 TCP 走 SecureLink；校园 UDP 明确拒绝，避免落到公网出口。

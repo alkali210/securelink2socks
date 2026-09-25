@@ -9,7 +9,8 @@ session directory. No credentials or raw profiles/PUSH are kept in this report.
 - TLS chain and explicit serverAuth verification succeed using profile CA.
 - TCP gateway handshake selects AES-128-GCM and assigns an IPv4 address.
 - Multi-part PUSH provides app ACLs. Parsing yields 66 deduplicated IPv4 TCP
-  grants for this account; domain rules are ignored without DNS.
+  grants in the initial IPv4-only implementation. Domain grants and VPN-only
+  DNS were subsequently added with user authorization (see the extension below).
 - The gateway does not select TLS-EKM. Standard OpenVPN KEY_METHOD 2 PRF
   produces working AEAD keys: 14 authenticated keepalives in 15 seconds,
   zero AEAD-open failures. Previously the incorrect EKM path produced zero
@@ -88,7 +89,7 @@ not available in this environment: cgo is disabled and no C compiler was found
 on PATH. Ordinary concurrency/cleanup tests pass; race-detector coverage is not
 claimed.
 
-## Mihomo split-routing correction — 2026-09-25
+## Mihomo split-routing correction — initial IPv4-only findings, 2026-09-25
 
 The original example's `MATCH,XMU` incorrectly sent ordinary internet and
 potential VPN bootstrap traffic into the campus gateway. Fail-closed behavior
@@ -139,3 +140,62 @@ Server-pushed DNS resolvers were inspected, but the current TCP ACL did not
 authorize DNS queries to them, so none were sent. Domain ACL/DNS support is
 explicitly outside the initial MVP scope and requires a scope decision before
 implementation. IPv6 detection remains outside the gateway scope.
+
+
+## Domain ACL/DNS extension acceptance — 2026-09-25
+
+The user explicitly authorized expanding the MVP to domain ACL/DNS support.
+The earlier detector refusal is now resolved. Current SOCKS DOMAIN handling
+uses exact/wildcard domain-and-port authorization or the existing IPv4-and-port
+ACL after resolution. DNS A/CNAME queries go directly through netstack to the
+current authenticated PUSH DNS servers. There is no host DNS/hosts lookup or
+external fallback, no shared DNS-derived IP authorization, and no cache.
+Internal DNS may use UDP/TCP port 53, but SOCKS UDP remains unsupported.
+
+The detector's page grants use ip.xmu.edu.cn, while its IPv4 JSONP script uses
+ip4.xmu.edu.cn. The sample Mihomo configuration maps the latter to the former
+as a domain alias for the same service, retaining the original TLS hostname
+and normal certificate verification. Static IP hosts entries were removed.
+
+Both an isolated official Mihomo v1.19.31 and the user's active FlClash core
+at 127.0.0.1:9090 passed:
+
+- https://ip.xmu.edu.cn/: HTTP 200.
+- https://ip4.xmu.edu.cn/ip/checkip.js?callback=getIP_xmu: HTTP 200;
+  `is_in_xmu` was true, and the reported source was the VPN-assigned IPv4.
+- Ordinary public HTTPS: HTTP 200 via DIRECT.
+- User-provided campus endpoint: HTTP 301 through XMU, redirects not followed.
+- Live-core VPN remained Ready for another 30 seconds. After stopping the test
+  VPN, public HTTPS still returned 200 and campus requests failed closed.
+
+The live test restored the original full Clash profile and stopped its test
+processes. Users should restart the rebuilt executable and reload mihomo.yaml.
+Offline tests cover exact/wildcard/port boundaries, numeric-domain grants,
+SOCKS DOMAIN decoding, per-request authorization, DNS response ownership,
+CNAME loops, TCP retry, mismatched questions, no-system-hosts lookup, missing
+DNS fail-closed behavior, and cancellation on session replacement. The earlier
+statement that the detector's TLS EOF was a remote-path problem was disproved
+by a raw SOCKS reply 0x02 before this extension; it is not a remaining TLS bug.
+
+Final validation also passed `go test ./...`, `go vet ./...`, Windows binary
+build, and the opt-in `TestLiveSOCKS` revocation/reconnect regression against
+the user-supplied endpoint. No long-duration or throughput claim is added.
+
+### Full redirect/TUN verification after the user's follow-up
+
+The original 301 check was insufficient to establish normal website access.
+Tracing the supplied HTTP endpoint followed `/resouces/pc`, `/cas/login/`, then
+`https://ids.xmu.edu.cn/authserver/login`. The public SSO endpoint had been
+incorrectly caught by the broad XMU proxy rule. An explicit DIRECT rule for
+ids.xmu.edu.cn now precedes that rule. This is intentional public-auth routing,
+not failure-triggered fallback for campus destinations.
+
+With a normal browser User-Agent, the complete chain reaches the unified
+login page with HTTP 200 through both the explicit 7890 proxy and the user's
+active TUN. The default Python User-Agent produced HTTP 404 at the public SSO
+page, so browser-like request headers were used for this comparison. No login
+form was submitted; post-login application content has not been validated.
+The detector simultaneously returned HTTP 200 and `is_in_xmu: true` on both
+paths. The original Clash profile was restored and test VPN processes stopped.
+Both the rebuilt executable and updated YAML are needed; a running old process
+does not acquire domain support when only the YAML is replaced.

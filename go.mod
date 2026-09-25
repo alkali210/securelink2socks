@@ -5,6 +5,7 @@ go 1.26.3
 require (
 	github.com/n0madic/go-openvpn v0.0.0-20260704073850-12597991e312
 	github.com/n0madic/go-openvpn/pkg/netstack v0.0.0-20260704073850-12597991e312
+	golang.org/x/net v0.53.0
 )
 
 require (

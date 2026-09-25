@@ -107,3 +107,29 @@ func FuzzParsePush(f *testing.F) {
 		}
 	})
 }
+
+func TestDomainRules(t *testing.T) {
+	s, err := ParsePush("app [domain:*.example.test][proto:tcp port:443],app [domain:Exact.TEST.][proto:tcp port:8443],app [domain:192.0.2.20][proto:tcp port:443]")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name string
+		port uint16
+		want bool
+	}{
+		{"a.example.test", 443, true}, {"a.b.example.test", 443, true}, {"example.test", 443, false}, {"badexample.test", 443, false}, {"a.example.test.evil", 443, false}, {"a.example.test", 80, false}, {"exact.test", 8443, true}, {"EXACT.TEST.", 8443, true}, {"exact.test..", 8443, false},
+	} {
+		if s.AllowsDomainTCP(tc.name, tc.port) != tc.want {
+			t.Errorf("wrong authorization: %s:%d", tc.name, tc.port)
+		}
+	}
+	if !s.AllowsTCP(netip.MustParseAddrPort("192.0.2.20:443")) || s.AllowsTCP(netip.MustParseAddrPort("192.0.2.20:80")) {
+		t.Fatal("numeric domain grant")
+	}
+	for _, name := range []string{"", "a..test", "-a.test", "a-.test", "a/test", "a\x00.test", "127.0.0.1", "::1"} {
+		if _, ok := CanonicalDomain(name); ok {
+			t.Errorf("accepted %q", name)
+		}
+	}
+}

@@ -148,8 +148,9 @@ app [addr:<IPv4 CIDR>][proto:tcp port:<decimal>;<decimal>]
 app [domain:<domain>][proto:any port:<decimal>]
 ```
 
-TCP/any rules support decimal single ports and semicolon lists; domain entries
-never grant IPv4 access and never trigger DNS. Unknown/malformed app syntax,
+TCP/any rules support decimal single ports and semicolon lists. Domain entries
+authorize request-scoped resolution and dialing as described in the extension
+below; they do not create shared IPv4 grants. Unknown/malformed app syntax,
 unknown protocols and port ranges invalidate the snapshot. Empty ACL denies
 traffic. Prefixes normalize and individual prefix/port grants deduplicate; the
 observed account produced 66 grants. This count need not match raw app entries.
@@ -171,10 +172,33 @@ tokens and is never printed or persisted.
 | 2 profile/handshake | TLS, authentication, AES-128-GCM, IPv4 and AEAD keepalive verified |
 | 3 ACL | Real nonempty structured snapshot verified |
 | 4 userspace TCP | User-provided endpoint connects through netstack; direct-host failure unverified because another VPN is active |
-| 5 SOCKS | IPv4 CONNECT/relay, refusals and half-close implemented and tested |
+| 5 SOCKS | IPv4/DOMAIN CONNECT, tunnel DNS, refusals and half-close implemented and tested |
 | 6 lifecycle | Generations, revocation, backoff, NeedsLogin and cancellation implemented |
-| 7 Mihomo | Isolated official portable client reaches the target through this SOCKS node |
+| 7 Mihomo | Official portable and user live core pass campus detector with is_in_xmu=true |
 | Performance | Not measured |
 
 No credential or raw live profile/PUSH fixture is committed. Local cached user
 sessions are used only by explicitly enabled live diagnostics.
+
+
+## Authorized domain/DNS extension — 2026-09-25
+
+The user expanded the initial IPv4-only scope to domain ACLs and DNS. Domain
+rules support exact ASCII/IDNA hostnames and `*.` subdomain suffixes, with
+case/trailing-dot normalization and label-boundary matching. A numeric IPv4 in
+a server `domain` field is treated as a /32 grant with the same ports.
+
+SOCKS DOMAIN requests retain their hostname until authorization. Only the
+current session's authenticated pushed IPv4 DNS servers are queried (port 53,
+UDP with TCP retry, through netstack). This narrow internal DNS permission is
+separate from application ACLs; SOCKS clients cannot use it to open arbitrary
+connections to DNS servers. No host resolver, hosts file, or external DNS
+fallback participates in destination resolution. DNS IDs/questions, A/CNAME
+ownership, response status and truncation are validated, with bounded messages,
+alias chains, answer counts and timeouts. There is no DNS cache.
+
+A matching domain+port grant authorizes that request's resolved destination;
+otherwise each candidate IPv4+port must match the IP ACL. Results never become
+shared IP grants. Non-unicast/loopback/link-local answers are rejected. Backend
+generation cancellation covers DNS and dialing, and closes old connections.
+No IPv6 target or SOCKS UDP support was added.

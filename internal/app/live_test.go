@@ -128,7 +128,7 @@ recovered:
 	for _, tc := range []struct {
 		request []byte
 		code    byte
-	}{{[]byte{5, 1, 0, 3}, 8}, {[]byte{5, 3, 0, 1}, 7}, {[]byte{5, 1, 0, 1, 192, 0, 2, 1, 1, 187}, 2}} {
+	}{{[]byte{5, 1, 0, 3, 0}, 8}, {[]byte{5, 3, 0, 1}, 7}, {[]byte{5, 1, 0, 1, 192, 0, 2, 1, 1, 187}, 2}} {
 		c = liveRequest(t, l.Addr().String(), tc.request)
 		_, e = io.ReadFull(c, r[:])
 		c.Close()

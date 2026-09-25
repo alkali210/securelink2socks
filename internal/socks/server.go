@@ -8,10 +8,12 @@ import (
 	"io"
 	"net"
 	"net/netip"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
 
+	"securelink2socks/internal/acl"
 	"securelink2socks/internal/gateway"
 )
 
@@ -84,25 +86,53 @@ func Handle(ctx context.Context, c net.Conn, b Backend) {
 		reply(c, 7)
 		return
 	}
-	if req[3] != 1 {
+	var host string
+	switch req[3] {
+	case 1:
+		var ip [4]byte
+		if _, err := io.ReadFull(c, ip[:]); err != nil {
+			return
+		}
+		host = netip.AddrFrom4(ip).String()
+	case 3:
+		var size [1]byte
+		if _, err := io.ReadFull(c, size[:]); err != nil {
+			return
+		}
+		if size[0] == 0 {
+			reply(c, 8)
+			return
+		}
+		name := make([]byte, int(size[0]))
+		if _, err := io.ReadFull(c, name); err != nil {
+			return
+		}
+		var ok bool
+		host, ok = acl.CanonicalDomain(string(name))
+		if !ok {
+			reply(c, 8)
+			return
+		}
+	default:
 		reply(c, 8)
 		return
 	}
-	var dest [6]byte
-	if _, err := io.ReadFull(c, dest[:]); err != nil {
+	var portBytes [2]byte
+	if _, err := io.ReadFull(c, portBytes[:]); err != nil {
 		return
 	}
-	target := netip.AddrPortFrom(netip.AddrFrom4([4]byte(dest[:4])), binary.BigEndian.Uint16(dest[4:]))
-	if target.Port() == 0 {
+	port := binary.BigEndian.Uint16(portBytes[:])
+	if port == 0 {
 		reply(c, 2)
 		return
 	}
+	address := net.JoinHostPort(host, strconv.Itoa(int(port)))
 	if !b.Ready() {
 		reply(c, 3)
 		return
 	}
 	dialCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	remote, err := b.DialContext(dialCtx, "tcp4", target.String())
+	remote, err := b.DialContext(dialCtx, "tcp4", address)
 	cancel()
 	if err != nil {
 		reply(c, errorReply(err))

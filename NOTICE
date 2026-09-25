@@ -16,3 +16,6 @@ continuations; select TLS-EKM or OpenVPN PRF key derivation; expose session
 lifecycle and opt-in fail-closed policy-update handling; add regression tests.
 See docs/upstream-patch.md.
 The upstream license and copyright notices are preserved.
+
+The DNS message codec uses golang.org/x/net/dns/dnsmessage v0.53.0
+(BSD-3-Clause). Its license is preserved in LICENSES/go-x-net-BSD-3-Clause.txt.

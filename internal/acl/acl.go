@@ -18,7 +18,15 @@ type rule struct {
 }
 
 // Snapshot has no exported mutable fields and is safe to share between readers.
-type Snapshot struct{ rules []rule }
+type domainRule struct {
+	name    string
+	port    uint16
+	anyPort bool
+}
+type Snapshot struct {
+	rules   []rule
+	domains []domainRule
+}
 
 func (s *Snapshot) Len() int {
 	if s == nil {
@@ -75,9 +83,33 @@ func ParsePush(raw string) (*Snapshot, error) {
 		} else {
 			ports = []uint16{0}
 		}
-		// Domain grants cannot authorize an IPv4 literal without DNS. They
-		// never become IP rules and cannot broaden another rule's scope.
 		if m[1] == "domain" {
+			name := m[2]
+			// Some XMU rules encode an IPv4 literal in the domain field.
+			if ip, err := netip.ParseAddr(name); err == nil && ip.Is4() {
+				for _, port := range ports {
+					r := rule{prefix: netip.PrefixFrom(ip, 32), port: port, anyPort: port == 0}
+					if !seen[r] {
+						s.rules = append(s.rules, r)
+						seen[r] = true
+					}
+				}
+				continue
+			}
+			wildcard := strings.HasPrefix(name, "*.")
+			if wildcard {
+				name = strings.TrimPrefix(name, "*.")
+			}
+			name, ok := CanonicalDomain(name)
+			if !ok {
+				return nil, errors.New("invalid app domain")
+			}
+			if wildcard {
+				name = "*." + name
+			}
+			for _, port := range ports {
+				s.domains = append(s.domains, domainRule{name, port, port == 0})
+			}
 			continue
 		}
 		prefix, err := netip.ParsePrefix(m[2])
@@ -93,4 +125,48 @@ func ParsePush(raw string) (*Snapshot, error) {
 		}
 	}
 	return s, nil
+}
+
+// CanonicalDomain accepts ASCII DNS hostnames, including already-encoded IDNA.
+func CanonicalDomain(name string) (string, bool) {
+	name = strings.ToLower(strings.TrimSuffix(name, "."))
+	if len(name) == 0 || len(name) > 253 {
+		return "", false
+	}
+	if _, err := netip.ParseAddr(name); err == nil {
+		return "", false
+	}
+	for _, label := range strings.Split(name, ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return "", false
+		}
+		for _, c := range label {
+			if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-') {
+				return "", false
+			}
+		}
+	}
+	return name, true
+}
+func (s *Snapshot) DomainLen() int {
+	if s == nil {
+		return 0
+	}
+	return len(s.domains)
+}
+func (s *Snapshot) AllowsDomainTCP(name string, port uint16) bool {
+	name, ok := CanonicalDomain(name)
+	if !ok || port == 0 || s == nil {
+		return false
+	}
+	for _, r := range s.domains {
+		match := name == r.name
+		if strings.HasPrefix(r.name, "*.") {
+			match = strings.HasSuffix(name, r.name[1:])
+		}
+		if match && (r.anyPort || r.port == port) {
+			return true
+		}
+	}
+	return false
 }

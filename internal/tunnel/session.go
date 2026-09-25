@@ -21,6 +21,7 @@ type Session struct {
 	client *openvpn.Client
 	stack  *netstack.Net
 	acl    *acl.Snapshot
+	dns    []netip.Addr
 	once   sync.Once
 }
 
@@ -83,8 +84,8 @@ func Open(ctx context.Context, profile securelink.Profile) (result *Session, rep
 	if err != nil {
 		return nil, report, err
 	}
-	report.ACLRules = snapshot.Len()
-	if snapshot.Len() == 0 {
+	report.ACLRules = snapshot.Len() + snapshot.DomainLen()
+	if report.ACLRules == 0 {
 		return nil, report, errors.New("no usable app ACL; traffic denied")
 	}
 	verifyCtx, stop := context.WithTimeout(ctx, 12*time.Second)
@@ -109,6 +110,6 @@ func Open(ctx context.Context, profile securelink.Profile) (result *Session, rep
 	if err != nil {
 		return nil, report, errors.New("userspace stack creation failed")
 	}
-	result = &Session{client: cli, stack: stack, acl: snapshot}
+	result = &Session{client: cli, stack: stack, acl: snapshot, dns: append([]netip.Addr(nil), pr.DNS...)}
 	return result, report, nil
 }
