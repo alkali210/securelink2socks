@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/netip"
 	"strings"
 	"sync"
@@ -15,8 +14,6 @@ import (
 	"time"
 
 	"github.com/n0madic/go-openvpn"
-	"github.com/n0madic/go-openvpn/pkg/netstack"
-	"securelink2socks/internal/acl"
 	"securelink2socks/internal/securelink"
 )
 
@@ -45,92 +42,21 @@ func CheckAEAD(ctx context.Context, profile securelink.Profile) (Report, error) 
 }
 
 func check(ctx context.Context, profile securelink.Profile, target netip.AddrPort, experiment bool) (Report, error) {
-	var report Report
+	session, report, err := Open(ctx, profile)
 	report.AEADProbe = experiment
-	parse := profile.ParseXMU
-	if experiment {
-		parse = profile.ParseAEADProbe
-	}
-	parsed, err := parse()
 	if err != nil {
 		return report, err
 	}
-	cfg := parsed.Config
-	report.Transport = cfg.Network
-	report.Remote = cfg.RemoteAddr
-	cfg.AutoReconnect = false
-	progress := &handshakeProgress{}
-	cfg.HandshakeTracer = progress
-	// Upstream logs may contain raw pushes and server-provided auth errors.
-	// Diagnostic output below is an explicit allowlist instead.
-	cfg.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
-	handshakeCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
-	defer cancel()
-	cli, err := openvpn.Dial(handshakeCtx, cfg)
-	report.Stage = progress.stage()
-	if err != nil {
-		if ctx.Err() != nil {
-			return report, ctx.Err()
-		}
-		if errors.Is(err, openvpn.ErrAuthFailed) {
-			return report, fmt.Errorf("%w at %s: %s", ErrVPNAuthRejected, report.Stage, handshakeReason(err))
-		}
-		return report, fmt.Errorf("OpenVPN handshake failed at %s: %s", report.Stage, handshakeReason(err))
-	}
-	defer cli.Close()
-	pr := cli.PushedOptions()
-	report.Transport = cfg.Network
-	report.Remote = cli.UnderlayRemoteAddr().String()
-	report.Cipher = pr.Cipher
-	if !pr.LocalIP.Is4() {
-		return report, errors.New("VPN did not assign IPv4")
-	}
-	report.IPv4 = pr.LocalIP.String()
-	switch pr.Cipher {
-	case "AES-128-GCM", "AES-256-GCM", "CHACHA20-POLY1305":
-	default:
-		return report, errors.New("VPN did not negotiate supported AEAD")
-	}
-	snapshot, err := acl.ParsePush(pr.Raw)
-	if err != nil {
-		return report, err
-	}
-	report.ACLRules = snapshot.Len()
-	if snapshot.Len() == 0 {
-		return report, errors.New("no usable app ACL; traffic denied")
-	}
-	// A successful TLS/PUSH exchange alone does not prove matching data keys.
-	// Require an authenticated inbound AEAD packet before claiming readiness.
-	verifyCtx, stopVerify := context.WithTimeout(ctx, 12*time.Second)
-	defer stopVerify()
-	tick := time.NewTicker(100 * time.Millisecond)
-	defer tick.Stop()
-	for !report.DataChannelVerified {
-		stats := cli.Stats()
-		if stats.PingIn > 0 || stats.Forwarded > 0 {
-			report.DataChannelVerified = true
-			break
-		}
-		select {
-		case <-verifyCtx.Done():
-			return report, errors.New("no authenticated VPN data received before verification timeout")
-		case <-tick.C:
-		}
-	}
-	stack, err := netstack.New(cli)
-	if err != nil {
-		return report, errors.New("userspace stack creation failed")
-	}
-	defer stack.Close()
+	defer session.Close()
 	if !target.IsValid() {
 		return report, nil
 	}
-	if !snapshot.AllowsTCP(target) {
+	if !session.AllowsTCP(target) {
 		return report, errors.New("target denied by SecureLink ACL")
 	}
 	dialCtx, stop := context.WithTimeout(ctx, 10*time.Second)
 	defer stop()
-	conn, err := stack.DialContext(dialCtx, "tcp4", target.String())
+	conn, err := session.DialContext(dialCtx, "tcp4", target.String())
 	if err != nil {
 		return report, errors.New("authorized userspace TCP connection failed")
 	}

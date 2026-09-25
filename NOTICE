@@ -12,6 +12,7 @@ github.com/n0madic/go-openvpn, revision
 Changes: expose raw PUSH options; add opt-in plain outer control framing;
 correct control-message TLS record boundaries, transport/key-size options,
 and platform peer-info; preserve TLS record boundaries; assemble PUSH
-continuations; select TLS-EKM or OpenVPN PRF key derivation; add regression
-tests. See docs/upstream-patch.md.
+continuations; select TLS-EKM or OpenVPN PRF key derivation; expose session
+lifecycle and opt-in fail-closed policy-update handling; add regression tests.
+See docs/upstream-patch.md.
 The upstream license and copyright notices are preserved.

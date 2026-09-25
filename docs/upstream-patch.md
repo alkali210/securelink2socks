@@ -34,6 +34,11 @@ Production delta:
     Retain/clear pre_master at the correct lifetime and apply the same policy
     during rekey. Add an independent Python HMAC golden and memory AEAD echo
     coverage for PRF; EKM test peers now explicitly advertise their policy.
+11. Expose current-session completion/cause for an application-owned supervisor
+    with AutoReconnect disabled. Add opt-in RestartOnPush: post-handshake
+    PUSH_REPLY/PUSH_UPDATE and loss of the active control stream close the
+    session, forcing authorization revocation before a fresh full handshake.
+    Old TLS readers closed during rekey are excluded from this restart rule.
 
 `raw_push_test.go` verifies that an unknown `app` option survives the internal
 parser, public conversion and reconnect callback dispatch. Additional tests

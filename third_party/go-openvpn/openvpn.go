@@ -166,6 +166,9 @@ func NewDatagramTransport(c net.Conn) Transport { return transport.NewDatagram(c
 
 // Config holds Dial parameters.
 type Config struct {
+	// RestartOnPush closes the session on a post-handshake PUSH policy update.
+	// Supervisors can invalidate existing streams and fetch a fresh full ACL.
+	RestartOnPush bool
 	// Network is the underlying transport: "udp", "udp4", "udp6", "tcp",
 	// "tcp4", "tcp6". When DialTransport is set it is only a hint passed
 	// through to the factory and may be empty.
@@ -697,6 +700,7 @@ func Dial(ctx context.Context, cfg *Config) (*Client, error) {
 // sessionCfg projects the public Config onto the internal session.Config.
 func sessionCfg(cfg *Config) session.Config {
 	return session.Config{
+		RestartOnPush:     cfg.RestartOnPush,
 		Network:           cfg.Network,
 		RemoteAddr:        cfg.RemoteAddr,
 		TLSConfig:         cfg.TLSConfig,

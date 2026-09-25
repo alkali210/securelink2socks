@@ -10,10 +10,10 @@ import (
 func TestOfflineCLI(t *testing.T) {
 	t.Setenv("SECURELINK2SOCKS_E2E", "")
 	var out bytes.Buffer
-	if err := run(context.Background(), nil, &out); err != nil || !strings.Contains(out.String(), "SOCKS serving is pending") {
+	if err := run(context.Background(), nil, &out); err != nil || !strings.Contains(out.String(), "SOCKS supports NO AUTH") {
 		t.Fatal("missing stage/help")
 	}
-	for _, args := range [][]string{{"login"}, {"check"}, {"check", "--aead-probe"}, {"probe", "192.0.2.1:443"}} {
+	for _, args := range [][]string{{"serve"}, {"login", "--force"}, {"login"}, {"check"}, {"check", "--aead-probe"}, {"probe", "192.0.2.1:443"}} {
 		err := run(context.Background(), args, &out)
 		if err == nil || !strings.Contains(err.Error(), "SECURELINK2SOCKS_E2E") {
 			t.Fatal("live command ran without opt-in")

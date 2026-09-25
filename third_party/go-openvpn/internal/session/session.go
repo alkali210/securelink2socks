@@ -54,8 +54,10 @@ type IngressHandler func(ip []byte)
 
 // Config holds everything needed to bring up a session.
 type Config struct {
-	Network    string // "udp" | "tcp"
-	RemoteAddr string // host:port
+	// RestartOnPush fails closed on post-handshake policy/configuration updates.
+	RestartOnPush bool
+	Network       string // "udp" | "tcp"
+	RemoteAddr    string // host:port
 
 	TLSConfig *tls.Config
 
@@ -733,6 +735,9 @@ func (s *Session) CloseErr() error {
 // leaves CloseErr nil, so polling CloseErr alone never returns true.
 func (s *Session) IsClosed() bool { return s.closed.Load() }
 
+// Done closes when the session starts shutting down.
+func (s *Session) Done() <-chan struct{} { return s.ctx.Done() }
+
 // ErrClosed is the generic error returned by Read/Write when the session has
 // been closed without a more specific reason. RestartError is returned when
 // the server requested a RESTART.
@@ -900,9 +905,25 @@ func (s *Session) controlChannelReader(conn *tls.Conn) {
 	for {
 		msg, err := control.ReadControlMessage(br)
 		if err != nil {
+			if s.cfg.RestartOnPush {
+				s.tlsMu.Lock()
+				current := s.tlsConn == conn && !s.closed.Load()
+				if current {
+					s.setCloseErr(&RestartError{Reason: "control channel closed"})
+				}
+				s.tlsMu.Unlock()
+				if current {
+					s.closeAsync("control channel closed")
+				}
+			}
 			return
 		}
 		switch {
+		case s.cfg.RestartOnPush && (msg == "PUSH_REPLY" || strings.HasPrefix(msg, "PUSH_REPLY,") || msg == "PUSH_UPDATE" || strings.HasPrefix(msg, "PUSH_UPDATE,")):
+			// Rebuild the full policy before accepting any further traffic.
+			s.setCloseErr(&RestartError{Reason: "server policy update"})
+			s.closeAsync("server policy update")
+			return
 		case msg == "EXIT" || strings.HasPrefix(msg, "EXIT,"):
 			// Server has cleanly disconnected. Close asynchronously
 			// because s.Close → shutdown → workers.Wait would

@@ -155,9 +155,12 @@ traffic. Prefixes normalize and individual prefix/port grants deduplicate; the
 observed account produced 66 grants. This count need not match raw app entries.
 The older separated-bracket reference fixtures remain supported.
 
-PUSH fragments are bounded and combined before ACL publication. Runtime PUSH
-updates, atomic snapshot replacement and connection revocation remain future
-service work. Raw PUSH may contain tokens and is never printed or persisted.
+PUSH fragments are bounded and combined before ACL publication. A runtime
+PUSH_REPLY/PUSH_UPDATE triggers fail-closed session teardown and complete
+reauthentication/config acquisition, rather than applying partial updates.
+Backend generations pair the immutable ACL with exactly one tunnel; replacing
+them cancels pending dials and closes all old connections. Raw PUSH may contain
+tokens and is never printed or persisted.
 
 ## Status against milestones
 
@@ -167,8 +170,10 @@ service work. Raw PUSH may contain tokens and is never printed or persisted.
 | 1 control plane | Real login, refresh and config verified |
 | 2 profile/handshake | TLS, authentication, AES-128-GCM, IPv4 and AEAD keepalive verified |
 | 3 ACL | Real nonempty structured snapshot verified |
-| 4 userspace TCP | Netstack probe implemented; no authorized known target available |
-| 5–7 SOCKS/lifecycle/Mihomo | Deferred by milestone 4's TCP proof requirement |
+| 4 userspace TCP | User-provided endpoint connects through netstack; direct-host failure unverified because another VPN is active |
+| 5 SOCKS | IPv4 CONNECT/relay, refusals and half-close implemented and tested |
+| 6 lifecycle | Generations, revocation, backoff, NeedsLogin and cancellation implemented |
+| 7 Mihomo | Isolated official portable client reaches the target through this SOCKS node |
 | Performance | Not measured |
 
 No credential or raw live profile/PUSH fixture is committed. Local cached user

@@ -16,15 +16,20 @@ import (
 	"runtime"
 	"strings"
 
+	"securelink2socks/internal/app"
+	"securelink2socks/internal/gateway"
 	"securelink2socks/internal/securelink"
+	"securelink2socks/internal/socks"
 	"securelink2socks/internal/storage"
 	"securelink2socks/internal/tunnel"
 )
 
-const usage = `securelink2socks — XMU userspace gateway (compatibility stage)
+const usage = `securelink2socks — XMU userspace SOCKS5 gateway
 
 Usage:
+	securelink2socks serve              SOCKS5 TCP on 127.0.0.1:1080
   securelink2socks login              Browser SSO / reuse or refresh session
+  securelink2socks login --force      Start a fresh browser SSO login
   securelink2socks check              Authenticate, fetch config, check handshake/ACL
   securelink2socks check --aead-probe  Compatibility alias for the verified AEAD policy
   securelink2socks probe IPv4:port    Also attempt an ACL-authorized TCP handshake
@@ -33,7 +38,8 @@ All network commands require SECURELINK2SOCKS_E2E=1 during this stage.
 State: SECURELINK2SOCKS_HOME or ~/.securelink2socks
 Optional callback injection: SL_CALLBACK_URL
 
-SOCKS serving is pending the plan's real-XMU compatibility and TCP gates.
+Listen override: SECURELINK2SOCKS_LISTEN (127.0.0.1:port only)
+SOCKS supports NO AUTH, IPv4 TCP CONNECT only; unavailable/denied fails closed.
 No host TUN, route or DNS changes are made.
 `
 
@@ -53,9 +59,10 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	}
 	var target netip.AddrPort
 	aeadProbe := len(args) == 2 && args[0] == "check" && args[1] == "--aead-probe"
+	forceLogin := len(args) == 2 && args[0] == "login" && args[1] == "--force"
 	switch args[0] {
-	case "login", "check":
-		if len(args) != 1 && !aeadProbe {
+	case "login", "check", "serve":
+		if len(args) != 1 && !aeadProbe && !forceLogin {
 			return errors.New("unexpected arguments; use --help")
 		}
 	case "probe":
@@ -77,6 +84,9 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if args[0] == "serve" {
+		return serve(ctx, home, out)
+	}
 	c, err := securelink.New(home)
 	if err != nil {
 		return err
@@ -85,7 +95,11 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if callback != "" {
 		err = c.Login(ctx, callback, nil)
 	} else {
-		err = c.EnsureSession(ctx, false)
+		if forceLogin {
+			err = securelink.ErrNeedsLogin
+		} else {
+			err = c.EnsureSession(ctx, false)
+		}
 		if errors.Is(err, securelink.ErrNeedsLogin) {
 			err = c.Login(ctx, "", func(ctx context.Context, loginURL string) (string, error) {
 				return prompt(ctx, loginURL, out, os.Stdin)
@@ -143,6 +157,34 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 			return e
 		}
 	}
+	return err
+}
+
+func serve(ctx context.Context, home string, out io.Writer) error {
+	address := os.Getenv("SECURELINK2SOCKS_LISTEN")
+	if address == "" {
+		address = "127.0.0.1:1080"
+	}
+	listener, err := socks.Listen(address)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(out, "SOCKS5 listening on", listener.Addr().String())
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	backend := &gateway.Backend{}
+	notify := func(state app.State) {
+		fmt.Fprintln(out, "VPN state:", state)
+		if state == app.NeedsLogin {
+			fmt.Fprintln(out, "Run securelink2socks login --force in another terminal using the same state directory.")
+		}
+	}
+	supervisor := &app.Supervisor{Backend: backend, Connect: app.Connector(home, notify), Notify: notify, WaitLogin: app.WaitForLogin(home)}
+	done := make(chan struct{})
+	go func() { defer close(done); supervisor.Run(ctx) }()
+	err = socks.Serve(ctx, listener, backend)
+	cancel()
+	<-done
 	return err
 }
 

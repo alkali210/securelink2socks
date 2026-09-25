@@ -2,7 +2,34 @@
 
 厦门大学 SecureLink → 用户态 TCP/IP → SOCKS5 网关。要求 Go 1.26.3 或更新版本，优先支持 Windows。
 
-**当前是兼容性验证阶段，尚不是可用的 SOCKS 代理。** 真实 SSO、API 刷新、TLS 验证、AES-128-GCM 握手、IPv4 分配和结构化 ACL 已成功；已成功解密网关 keepalive。按初始计划，仍需完成已知授权校内服务的用户态 TCP 对照测试，才能进入 SOCKS/重连服务实现。
+已实现 IPv4 TCP SOCKS5、ACL 授权与重连管理。真实 XMU、用户态 TCP 和独立 Mihomo 代理链已验证；吞吐量与长期稳定性尚未验收。
+
+## 启动
+
+```powershell
+$env:SECURELINK2SOCKS_E2E = '1'
+# 如果之前使用了独立会话目录，保持相同设置：
+# $env:SECURELINK2SOCKS_HOME = "$env:USERPROFILE/.securelink2socks-fresh"
+./bin/securelink2socks.exe login
+./bin/securelink2socks.exe serve
+```
+
+服务立即监听 `127.0.0.1:1080`；出现 `VPN state: Ready` 后允许授权连接。连接中/重连时监听保留，新请求立即失败；不会通过主机网络直连回退。Ctrl-C 关闭监听、连接、用户态栈和 VPN。
+
+Mihomo 节点：
+
+```yaml
+proxies:
+  - name: XMU
+    type: socks5
+    server: 127.0.0.1
+    port: 1080
+    udp: false
+```
+
+上游客户端负责 DNS 和流量选择，并须向此节点发送 IPv4 字面量；SOCKS DOMAIN/IPv6 请求返回 `0x08`，BIND/UDP 返回 `0x07`。未就绪返回 `0x03`，ACL 拒绝返回 `0x02`。
+
+可用 `SECURELINK2SOCKS_LISTEN=127.0.0.1:其他端口` 更改端口，不能绑定其他地址。遇到 `NeedsLogin`，在同一会话目录的另一终端执行 `login --force`；服务等待会话文件更新后恢复，不反复请求失败的认证。
 
 ## 已实现
 
@@ -13,6 +40,8 @@
 - 固定 go-openvpn 与 netstack 版本；依赖补丁暴露原始 PUSH_REPLY，并修复控制消息与握手字段兼容性。
 - 不可变、默认拒绝的 ACL 快照；支持实测的 IPv4 CIDR、`proto:any/tcp`、`port:any`/单端口/分号列表。域名授权不会产生 IPv4 授权。
 - `check` 无 TUN 握手诊断；`probe` 仅通过 netstack 对 ACL 授权的 IPv4:端口建立 TCP 连接，随后关闭，不发送应用层数据。
+- SOCKS5 NO AUTH + IPv4 CONNECT、双向传输和 TCP 半关闭。
+- 有界指数退避重连；断线或 PUSH 策略更新撤销旧 ACL，取消未完成拨号并关闭旧连接，重新获取完整 ACL 后才 Ready。
 
 不会创建 TUN/TAP/DCO/Wintun，不修改主机路由或 DNS，不提供 DIRECT 回退。VPN remote 和测试目标只接受 IPv4 字面量；固定 HTTPS 控制面主机名仍由 HTTP transport 正常解析。不存在目标域名解析或 DNS 服务。
 
@@ -50,16 +79,15 @@ $env:SECURELINK2SOCKS_E2E = '1'
 
 状态目录默认为 `~/.securelink2socks/`，可用 `SECURELINK2SOCKS_HOME` 覆盖。会话使用临时文件 + 同目录替换保存。Unix 文件模式为 0600；Windows 使用目录继承的访问控制，应保存在自己的用户目录中。
 
-当前不支持 `SECURELINK2SOCKS_LISTEN`、日志级别或 ACL dump；这些随后续服务阶段实现。`SL_CALLBACK_URL` 可跳过手动输入，但回调通常短时有效且只能使用一次。
+当前日志仅输出状态，不支持原始 ACL dump。`SL_CALLBACK_URL` 可跳过手动输入，但回调通常短时有效且只能使用一次。
 
 ## 尚待验证/实现
 
-- 超出已观察 ACL 格式的协议/端口扩展和运行时 PUSH 更新。
-- 真实 XMU 私网 TCP 可达性、主机网络状态不变的实机证据。
-- SOCKS5 listener/CONNECT、ACL 原子替换和旧连接终止、生命周期与重连。
-- Mihomo E2E 和至少 100 Mbps 的性能验收。
+- 超出已观察 ACL 格式的协议/端口扩展。
+- 无其他 VPN 时“主机直连失败、用户态成功”的对照；本次用户确认还有其他 VPN 在线。
+- 长时间运行、物理网络断开/恢复和至少 100 Mbps 的性能验收。
 
-当前已证明真实网关接受仅 AEAD 客户端，但尚未证明校内 TCP 与完整代理服务可用。详情见 [协议调查](docs/protocol-notes.md)、[实机调查](docs/live-validation.md) 和 [依赖补丁](docs/upstream-patch.md)。
+当前已完成真实 SOCKS/Mihomo TCP 验证；测试的具体范围与未验收项见 [实机调查](docs/live-validation.md)。协议细节见 [协议调查](docs/protocol-notes.md) 和 [依赖补丁](docs/upstream-patch.md)。
 
 ## 许可证
 
