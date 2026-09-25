@@ -1,0 +1,27 @@
+# securelink2socks 的本机 Mihomo 配置。
+# 先启动 `securelink2socks.exe serve`；默认监听 127.0.0.1:1080。
+mixed-port: 7890
+allow-lan: false
+bind-address: 127.0.0.1
+mode: rule
+log-level: info
+ipv6: false
+
+# 仅供应用显式设置代理；不创建 TUN，也不修改系统路由。
+tun:
+  enable: false
+
+# SOCKS 服务不提供 DNS；应用须以 IPv4 字面量作为连接目标。
+dns:
+  enable: false
+
+proxies:
+  - name: XMU
+    type: socks5
+    server: 127.0.0.1
+    port: 1080
+    udp: false
+
+# 失败关闭：发往 Mihomo 的请求全部走 SecureLink，不回退到 DIRECT。
+rules:
+  - MATCH,XMU

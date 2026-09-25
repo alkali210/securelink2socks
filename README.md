@@ -18,6 +18,8 @@ $env:SECURELINK2SOCKS_E2E = '1'
 
 Mihomo 节点：
 
+完整的本机配置见 [mihomo.yaml](mihomo.yaml)。启动 SecureLink 服务后，在应用中使用 `127.0.0.1:7890` 作为 HTTP/SOCKS 代理；规则会将 Mihomo 收到的请求全部交给 XMU 节点，不设 DIRECT 回退。
+
 ```yaml
 proxies:
   - name: XMU
@@ -28,6 +30,8 @@ proxies:
 ```
 
 上游客户端负责 DNS 和流量选择，并须向此节点发送 IPv4 字面量；SOCKS DOMAIN/IPv6 请求返回 `0x08`，BIND/UDP 返回 `0x07`。未就绪返回 `0x03`，ACL 拒绝返回 `0x02`。
+
+Mihomo 的 SOCKS 出站通常会将域名请求作为 SOCKS DOMAIN 发送；当前服务不接受该地址类型。因此这个配置适用于向 Mihomo 发送 IPv4 字面量的应用，域名代理请求需要先由应用侧解析并以 IP 地址连接。
 
 可用 `SECURELINK2SOCKS_LISTEN=127.0.0.1:其他端口` 更改端口，不能绑定其他地址。遇到 `NeedsLogin`，在同一会话目录的另一终端执行 `login --force`；服务等待会话文件更新后恢复，不反复请求失败的认证。
 
