@@ -23,6 +23,7 @@ dns:
 
 # 2026-09-25 查询的真实 A 记录。hosts 使 Mihomo 向 SOCKS 发送 IPv4。
 # 其他校园域名也需添加真实 IPv4；地址变更后需要更新。
+# 注意：hosts 不会增加 ACL 授权。检测站当前只有域名授权，程序会返回 0x02。
 hosts:
   ip.xmu.edu.cn: 210.34.0.61
   ip4.xmu.edu.cn: 210.34.0.61

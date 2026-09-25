@@ -18,9 +18,9 @@ $env:SECURELINK2SOCKS_E2E = '1'
 
 Mihomo 完整配置见 [mihomo.yaml](mihomo.yaml)。启动 SecureLink 服务后导入配置，使用**规则模式**，应用代理地址为 `127.0.0.1:7890`。普通互联网走 DIRECT；`xmu.edu.cn` 和列出的校内 IPv4 走 XMU；SecureLink 进程、登录 API 和 VPN 网关优先直连，防止代理循环。校园请求失败不会回退直连。FlClash 可能覆盖 YAML 的 TUN、DNS 和端口设置，应以其运行配置为准。
 
-当前 SOCKS 服务只接受 IPv4 TCP。示例用 Mihomo 的 `hosts` 将 `ip.xmu.edu.cn`、`ip4.xmu.edu.cn` 映射为查询到的真实 IPv4，使其 SOCKS 出站发送 IP，同时保留 HTTPS 主机名和证书验证。其他校园域名也需在 `hosts` 中添加真实 IPv4；地址变化后需更新。仅开启 Mihomo DNS 不保证 SOCKS 出站使用 IP，不能使用 Fake-IP 地址作为静态映射。SOCKS DOMAIN/IPv6 请求返回 `0x08`，BIND/UDP 返回 `0x07`；未就绪返回 `0x03`，ACL 拒绝返回 `0x02`。
+当前 SOCKS 服务只接受 IPv4 TCP，目标还必须具有服务器下发的 IPv4 ACL 授权。示例用 Mihomo 的 `hosts` 将 `ip.xmu.edu.cn`、`ip4.xmu.edu.cn` 映射为查询到的真实 IPv4，使其 SOCKS 出站发送 IP，同时保留 HTTPS 主机名和证书验证。此映射只转换地址类型，不能把域名 ACL 变成 IPv4 授权。其他校园域名也需在 `hosts` 中添加真实 IPv4，且该 IPv4:端口本身须有 ACL 授权；地址变化后需更新。仅开启 Mihomo DNS 不保证 SOCKS 出站使用 IP，不能使用 Fake-IP 地址作为静态映射。SOCKS DOMAIN/IPv6 请求返回 `0x08`，BIND/UDP 返回 `0x07`；未就绪返回 `0x03`，ACL 拒绝返回 `0x02`。
 
-2026-09-25 已在用户的 9090 内核验证普通公网访问和已知校内 HTTP 服务。IP 检测站经 VPN 的 TLS 握手仍异常关闭，尚未取得“校园网内”检测结果；详情见 [实机记录](docs/live-validation.md)。
+2026-09-25 已在用户的 9090 内核验证普通公网访问和已知校内 HTTP 服务。IP 检测站只有域名 ACL 授权，当前程序返回 SOCKS `0x02` 拒绝，尚不能完成“校园网内”检测。Mihomo 提前应答 HTTP CONNECT 后，该拒绝会表现为 TLS EOF；详情见 [实机记录](docs/live-validation.md)。
 
 可用 `SECURELINK2SOCKS_LISTEN=127.0.0.1:其他端口` 更改端口，不能绑定其他地址。遇到 `NeedsLogin`，在同一会话目录的另一终端执行 `login --force`；服务等待会话文件更新后恢复，不反复请求失败的认证。
 

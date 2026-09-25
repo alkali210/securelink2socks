@@ -123,11 +123,19 @@ is implemented elsewhere; ordinary DNS configuration alone is insufficient.
 Do not substitute a `type: direct` node with `dialer-proxy`: v1.19.31 accepted
 that experiment's configuration but did not use the intended SOCKS path.
 
-Campus detector acceptance remains incomplete. The page at ip.xmu.edu.cn uses
-`https://ip4.xmu.edu.cn/ip/checkip.js?callback=getIP_xmu` for its IPv4 decision.
-The direct-path baseline returned `is_in_xmu: false`. Through the real SOCKS
-path, TCP CONNECT succeeded but HTTPS ended with TLS unexpected EOF, including
-when constrained to certificate-verified TLS 1.2; HTTP port 80 also did not
-return a usable response. This occurred on both tested cores. There is no
-successful `is_in_xmu: true` result, and the cause of the server-side/path
-closure has not been established. IPv6 detection is outside the gateway scope.
+Campus detector acceptance remains blocked by the IPv4-only ACL policy, not
+an established remote TLS problem. The user confirmed that the official client
+opens the detector and reports campus access. Inspecting only relevant server
+options showed `app [domain:ip.xmu.edu.cn][proto:tcp port:443]`. The current
+parser deliberately ignores domain grants, and 210.34.0.61:443 is not allowed
+by its IPv4 snapshot. A raw SOCKS test returned `05 02 00 01 00 00 00 00 00 00`
+(reply 0x02, ACL denied). Mihomo's early HTTP CONNECT response had obscured this
+local refusal as a subsequent TLS EOF; that response did not prove a VPN TCP
+connection to the detector. Static hosts cannot add the missing authorization.
+
+The detector page uses ip4.xmu.edu.cn for its IPv4 result. Its direct-path
+baseline returned `is_in_xmu: false`; there is no tunneled detector result.
+Server-pushed DNS resolvers were inspected, but the current TCP ACL did not
+authorize DNS queries to them, so none were sent. Domain ACL/DNS support is
+explicitly outside the initial MVP scope and requires a scope decision before
+implementation. IPv6 detection remains outside the gateway scope.
