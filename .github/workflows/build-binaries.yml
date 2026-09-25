@@ -1,0 +1,58 @@
+name: Build binaries
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: windows
+            goarch: amd64
+          - goos: windows
+            goarch: arm64
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          set -euo pipefail
+          target="securelink2socks-${GOOS}-${GOARCH}"
+          directory="dist/${target}"
+          binary=securelink2socks
+          if [[ "$GOOS" == windows ]]; then
+            binary+=.exe
+          fi
+          mkdir -p "$directory"
+          go build -trimpath -o "${directory}/${binary}" ./cmd/securelink2socks
+          cp README.md LICENSE NOTICE "$directory/"
+          cp -R LICENSES "$directory/"
+      - name: Upload ${{ matrix.goos }}/${{ matrix.goarch }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: securelink2socks-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/securelink2socks-${{ matrix.goos }}-${{ matrix.goarch }}/
+          if-no-files-found: error

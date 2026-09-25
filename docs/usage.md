@@ -1,11 +1,21 @@
 # 使用与排障
 
+Windows:
+
 ```powershell
 $env:SECURELINK2SOCKS_E2E = '1'
 # 如果之前使用了独立会话目录，保持相同设置：
 # $env:SECURELINK2SOCKS_HOME = "$env:USERPROFILE/.securelink2socks-fresh"
 ./bin/securelink2socks.exe login
 ./bin/securelink2socks.exe serve
+```
+
+Linux/macOS:
+
+```sh
+export SECURELINK2SOCKS_E2E=1
+./bin/securelink2socks login
+./bin/securelink2socks serve
 ```
 
 服务立即监听 `127.0.0.1:1080`；出现 `VPN state: Ready` 后允许授权连接。连接中/重连时监听保留，新请求立即失败；不会通过主机网络直连回退。Ctrl-C 关闭监听、连接、用户态栈和 VPN。
@@ -52,4 +62,3 @@ $env:SECURELINK2SOCKS_E2E = '1'
 状态目录默认为 `~/.securelink2socks/`，可用 `SECURELINK2SOCKS_HOME` 覆盖。会话使用临时文件 + 同目录替换保存。Unix 文件模式为 0600；Windows 使用目录继承的访问控制，应保存在自己的用户目录中。
 
 当前日志仅输出状态，不支持原始 ACL dump。`SL_CALLBACK_URL` 可跳过手动输入，但回调通常短时有效且只能使用一次。
-

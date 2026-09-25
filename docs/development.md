@@ -1,6 +1,6 @@
 # 开发指南
 
-要求 Go 1.26.3 或更新版本，当前优先验证 Windows。登录、配置与排障见 [使用说明](usage.md)，后续方向见 [阶段计划](roadmap.md)。
+要求 Go 1.26.3 或更新版本。Windows 已完成实机验证；Windows、Linux、macOS 的 amd64/arm64 构建已在 Windows 上使用 Go 1.27.0、`CGO_ENABLED=0` 交叉编译通过。Linux、macOS 和 Windows arm64 的运行、登录及 VPN 连接仍待目标平台验证。登录、配置与排障见 [使用说明](usage.md)，后续方向见 [阶段计划](roadmap.md)。
 
 ## 实现概览
 
@@ -16,19 +16,60 @@
 
 不会创建 TUN/TAP/DCO/Wintun，不修改主机路由或 DNS，不提供 DIRECT 回退。VPN remote 和测试目标只接受 IPv4 字面量；固定 HTTPS 控制面主机名仍由 HTTP transport 正常解析。目标域名的 A/CNAME 查询仅经用户态隧道发送到服务器下发的 DNS；不读取系统 hosts 或使用系统解析器。DNS 查询有超时、报文和别名链长度限制，不缓存跨会话授权。
 
-## 构建与离线检查
+## 本机构建与离线检查
+
+Windows:
 
 ```powershell
 go test ./...
 go vet ./...
 go -C third_party/go-openvpn test ./...
+New-Item -ItemType Directory -Force bin | Out-Null
 go build -o bin/securelink2socks.exe ./cmd/securelink2socks
 ./bin/securelink2socks.exe --help
+```
+
+Linux/macOS:
+
+```sh
+go test ./...
+go vet ./...
+go -C third_party/go-openvpn test ./...
+mkdir -p bin
+go build -o bin/securelink2socks ./cmd/securelink2socks
+./bin/securelink2socks --help
 ```
 
 首次构建会下载已固定版本的依赖；测试本身不访问 XMU。测试数据全部为合成数据，见 [testdata/securelink](../testdata/securelink/README.md)。上游依赖测试可能使用本地回环网络/内存连接。
 
 初期离线测试结果及上游并发测试的超时记录见 [离线验证记录](offline-validation.md)。
+
+## 交叉编译与 tag 产物
+
+项目不依赖 CGO。可在 Windows PowerShell 中指定目标平台，例如：
+
+```powershell
+$env:CGO_ENABLED = '0'
+$env:GOOS = 'linux'
+$env:GOARCH = 'arm64'
+New-Item -ItemType Directory -Force bin | Out-Null
+go build -o bin/securelink2socks-linux-arm64 ./cmd/securelink2socks
+```
+
+在 Linux/macOS shell 中交叉编译 Windows 示例：
+
+```sh
+mkdir -p bin
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o bin/securelink2socks-windows-amd64.exe ./cmd/securelink2socks
+```
+
+支持的构建目标及 [构建 workflow](../.github/workflows/build-binaries.yml) 的 artifact 名称：
+
+| 目标系统 | 架构 | artifact 名称 |
+| --- | --- | --- |
+| Windows | amd64、arm64 | `securelink2socks-windows-amd64`、`securelink2socks-windows-arm64` |
+| Linux | amd64、arm64 | `securelink2socks-linux-amd64`、`securelink2socks-linux-arm64` |
+| macOS | amd64、arm64 | `securelink2socks-darwin-amd64`、`securelink2socks-darwin-arm64` |
 
 ## 联网验证
 
