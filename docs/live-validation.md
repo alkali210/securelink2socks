@@ -87,3 +87,47 @@ contain synthetic values only. Live checks remain opt-in. `go test -race` was
 not available in this environment: cgo is disabled and no C compiler was found
 on PATH. Ordinary concurrency/cleanup tests pass; race-detector coverage is not
 claimed.
+
+## Mihomo split-routing correction — 2026-09-25
+
+The original example's `MATCH,XMU` incorrectly sent ordinary internet and
+potential VPN bootstrap traffic into the campus gateway. Fail-closed behavior
+belongs to campus requests; it does not require routing all public traffic
+through SecureLink. The updated configuration routes the SecureLink process,
+control-plane hosts and observed gateway directly, sends XMU domains and the
+explicit campus IP targets through SOCKS, and uses DIRECT for other traffic.
+Campus UDP is rejected explicitly.
+
+The user's existing FlClash API on 127.0.0.1:9090 reported an active TUN despite
+the example disabling TUN. Tests preserved that active TUN configuration,
+temporarily loaded the corrected profile via the API, and restored the original
+full profile afterward. No persistent FlClash profile file was edited. Test VPN
+processes were stopped afterward.
+
+The configuration passes official Mihomo v1.19.31 `-t` and was accepted by the
+user's running core (API version string `1.10.0`). Both the isolated official
+core and the user's core produced these results:
+
+- Ordinary HTTPS internet request: HTTP 200 through DIRECT.
+- User-supplied campus HTTP endpoint: HTTP 301 through XMU (redirects not followed).
+- The live core test held the VPN Ready for a further 30 seconds without a
+  Reconnecting transition. This is a short regression check, not a stability test.
+- After stopping only the test VPN, ordinary HTTPS still returned 200 and the
+  campus request failed, confirming there was no campus-to-DIRECT fallback.
+
+`hosts` entries map `ip.xmu.edu.cn` and `ip4.xmu.edu.cn` to their public A record
+210.34.0.61, queried on this date. Mihomo's hosts handling removes the domain
+from SOCKS dial metadata while preserving the application's TLS hostname.
+Other campus domains need equivalent real IPv4 mappings until domain handling
+is implemented elsewhere; ordinary DNS configuration alone is insufficient.
+Do not substitute a `type: direct` node with `dialer-proxy`: v1.19.31 accepted
+that experiment's configuration but did not use the intended SOCKS path.
+
+Campus detector acceptance remains incomplete. The page at ip.xmu.edu.cn uses
+`https://ip4.xmu.edu.cn/ip/checkip.js?callback=getIP_xmu` for its IPv4 decision.
+The direct-path baseline returned `is_in_xmu: false`. Through the real SOCKS
+path, TCP CONNECT succeeded but HTTPS ended with TLS unexpected EOF, including
+when constrained to certificate-verified TLS 1.2; HTTP port 80 also did not
+return a usable response. This occurred on both tested cores. There is no
+successful `is_in_xmu: true` result, and the cause of the server-side/path
+closure has not been established. IPv6 detection is outside the gateway scope.

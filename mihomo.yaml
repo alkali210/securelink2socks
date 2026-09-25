@@ -1,19 +1,31 @@
-# securelink2socks 的本机 Mihomo 配置。
-# 先启动 `securelink2socks.exe serve`；默认监听 127.0.0.1:1080。
+# 先启动 securelink2socks.exe serve；在 FlClash 中使用「规则」模式。
 mixed-port: 7890
 allow-lan: false
 bind-address: 127.0.0.1
 mode: rule
 log-level: info
 ipv6: false
-
-# 仅供应用显式设置代理；不创建 TUN，也不修改系统路由。
+find-process-mode: always
 tun:
   enable: false
-
-# SOCKS 服务不提供 DNS；应用须以 IPv4 字面量作为连接目标。
-dns:
+sniffer:
   enable: false
+dns:
+  enable: true
+  ipv6: false
+  enhanced-mode: redir-host
+  use-hosts: true
+  respect-rules: false
+  nameserver:
+    - https://223.5.5.5/dns-query
+  direct-nameserver:
+    - https://223.5.5.5/dns-query
+
+# 2026-09-25 查询的真实 A 记录。hosts 使 Mihomo 向 SOCKS 发送 IPv4。
+# 其他校园域名也需添加真实 IPv4；地址变更后需要更新。
+hosts:
+  ip.xmu.edu.cn: 210.34.0.61
+  ip4.xmu.edu.cn: 210.34.0.61
 
 proxies:
   - name: XMU
@@ -22,6 +34,22 @@ proxies:
     port: 1080
     udp: false
 
-# 失败关闭：发往 Mihomo 的请求全部走 SecureLink，不回退到 DIRECT。
 rules:
-  - MATCH,XMU
+  # 优先放行 VPN 本身，避免 TUN/系统代理把外层连接再次送进 VPN。
+  - PROCESS-NAME,securelink2socks.exe,DIRECT
+  - PROCESS-NAME,securelink2socks,DIRECT
+  - DOMAIN,svpnlink.xmu.edu.cn,DIRECT
+  - DOMAIN,svpnsso.xmu.edu.cn,DIRECT
+  - IP-CIDR,219.229.81.217/32,DIRECT,no-resolve
+  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+  # 校园 TCP 走 SecureLink；校园 UDP 明确拒绝，避免落到公网出口。
+  - AND,((DOMAIN-SUFFIX,xmu.edu.cn),(NETWORK,UDP)),REJECT
+  - DOMAIN-SUFFIX,xmu.edu.cn,XMU
+  # 检测页的 IPv4 字面量也走校园出口。
+  - AND,((NETWORK,UDP),(IP-CIDR,210.34.0.61/32,no-resolve)),REJECT
+  - IP-CIDR,210.34.0.61/32,XMU,no-resolve
+  # 已验证的校内地址；其他校内 IP 可按需在这里添加。
+  - AND,((NETWORK,UDP),(IP-CIDR,172.27.75.118/32,no-resolve)),REJECT
+  - IP-CIDR,172.27.75.118/32,XMU,no-resolve
+  # 普通互联网直接访问；校园规则失败不会继续匹配此规则。
+  - MATCH,DIRECT

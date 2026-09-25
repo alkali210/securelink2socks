@@ -16,22 +16,11 @@ $env:SECURELINK2SOCKS_E2E = '1'
 
 服务立即监听 `127.0.0.1:1080`；出现 `VPN state: Ready` 后允许授权连接。连接中/重连时监听保留，新请求立即失败；不会通过主机网络直连回退。Ctrl-C 关闭监听、连接、用户态栈和 VPN。
 
-Mihomo 节点：
+Mihomo 完整配置见 [mihomo.yaml](mihomo.yaml)。启动 SecureLink 服务后导入配置，使用**规则模式**，应用代理地址为 `127.0.0.1:7890`。普通互联网走 DIRECT；`xmu.edu.cn` 和列出的校内 IPv4 走 XMU；SecureLink 进程、登录 API 和 VPN 网关优先直连，防止代理循环。校园请求失败不会回退直连。FlClash 可能覆盖 YAML 的 TUN、DNS 和端口设置，应以其运行配置为准。
 
-完整的本机配置见 [mihomo.yaml](mihomo.yaml)。启动 SecureLink 服务后，在应用中使用 `127.0.0.1:7890` 作为 HTTP/SOCKS 代理；规则会将 Mihomo 收到的请求全部交给 XMU 节点，不设 DIRECT 回退。
+当前 SOCKS 服务只接受 IPv4 TCP。示例用 Mihomo 的 `hosts` 将 `ip.xmu.edu.cn`、`ip4.xmu.edu.cn` 映射为查询到的真实 IPv4，使其 SOCKS 出站发送 IP，同时保留 HTTPS 主机名和证书验证。其他校园域名也需在 `hosts` 中添加真实 IPv4；地址变化后需更新。仅开启 Mihomo DNS 不保证 SOCKS 出站使用 IP，不能使用 Fake-IP 地址作为静态映射。SOCKS DOMAIN/IPv6 请求返回 `0x08`，BIND/UDP 返回 `0x07`；未就绪返回 `0x03`，ACL 拒绝返回 `0x02`。
 
-```yaml
-proxies:
-  - name: XMU
-    type: socks5
-    server: 127.0.0.1
-    port: 1080
-    udp: false
-```
-
-上游客户端负责 DNS 和流量选择，并须向此节点发送 IPv4 字面量；SOCKS DOMAIN/IPv6 请求返回 `0x08`，BIND/UDP 返回 `0x07`。未就绪返回 `0x03`，ACL 拒绝返回 `0x02`。
-
-Mihomo 的 SOCKS 出站通常会将域名请求作为 SOCKS DOMAIN 发送；当前服务不接受该地址类型。因此这个配置适用于向 Mihomo 发送 IPv4 字面量的应用，域名代理请求需要先由应用侧解析并以 IP 地址连接。
+2026-09-25 已在用户的 9090 内核验证普通公网访问和已知校内 HTTP 服务。IP 检测站经 VPN 的 TLS 握手仍异常关闭，尚未取得“校园网内”检测结果；详情见 [实机记录](docs/live-validation.md)。
 
 可用 `SECURELINK2SOCKS_LISTEN=127.0.0.1:其他端口` 更改端口，不能绑定其他地址。遇到 `NeedsLogin`，在同一会话目录的另一终端执行 `login --force`；服务等待会话文件更新后恢复，不反复请求失败的认证。
 
@@ -93,6 +82,11 @@ $env:SECURELINK2SOCKS_E2E = '1'
 
 当前已完成真实 SOCKS/Mihomo TCP 验证；测试的具体范围与未验收项见 [实机调查](docs/live-validation.md)。协议细节见 [协议调查](docs/protocol-notes.md) 和 [依赖补丁](docs/upstream-patch.md)。
 
+## 致谢
+
+- [go-openvpn](https://github.com/n0madic/go-openvpn)
+- [xmu_secure_link](https://github.com/XMU-MoYu-Club/xmu_secure_link)
+
 ## 许可证
 
-AGPL-3.0-or-later。Rust 控制面参考的 GPL-3.0 许可及上游归属保留在 [NOTICE](NOTICE)、[LICENSES](LICENSES/) 和依赖目录中。
+AGPL-3.0-or-later
