@@ -1,0 +1,4 @@
+[submodule "third_party/go-openvpn"]
+	path = third_party/go-openvpn
+	url = https://github.com/alkali210/go-openvpn.git
+	branch = patched

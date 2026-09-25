@@ -18,4 +18,7 @@ require (
 	gvisor.dev/gvisor v0.0.0-20260603223238-3694902083d5 // indirect
 )
 
+// Patched fork pinned by the third_party/go-openvpn Git submodule.
+// Initialize with: git submodule update --init --recursive
+// pkg/netstack remains a separately pinned upstream module.
 replace github.com/n0madic/go-openvpn => ./third_party/go-openvpn

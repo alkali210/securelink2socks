@@ -14,7 +14,16 @@
 
 ## 使用
 
-安装 Go 1.26 或更新版本，在仓库目录构建并启动。Windows:
+安装 Go 1.26.3 或更新版本。源码构建需要先拉取子模块：
+
+```sh
+git clone --recurse-submodules https://github.com/alkali210/securelink2socks.git
+cd securelink2socks
+# 已有工作区更新后执行：
+git submodule update --init --recursive
+```
+
+Windows:
 
 ```powershell
 New-Item -ItemType Directory -Force bin | Out-Null

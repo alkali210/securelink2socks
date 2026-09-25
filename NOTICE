@@ -6,16 +6,22 @@ Its license is preserved in LICENSES/xmu_secure_link-GPL-3.0.txt.
 MySecureLink was consulted as a secondary protocol reference; its binaries,
 private key material, credentials, and data-plane implementation are not used.
 
-third_party/go-openvpn contains the root module Go sources and pkg/ovpn from
-github.com/n0madic/go-openvpn, revision
+third_party/go-openvpn is a Git submodule of
+https://github.com/alkali210/go-openvpn (patched branch), based on
+https://github.com/n0madic/go-openvpn at revision
 12597991e31263f9309a6589dfd63a304349bafc (AGPL-3.0-or-later).
+The exact fork revision is pinned by the main repository's Git submodule entry.
+The separate github.com/n0madic/go-openvpn/pkg/netstack Go module remains
+pinned to the upstream base in go.mod.
 Changes: expose raw PUSH options; add opt-in plain outer control framing;
 correct control-message TLS record boundaries, transport/key-size options,
 and platform peer-info; preserve TLS record boundaries; assemble PUSH
 continuations; select TLS-EKM or OpenVPN PRF key derivation; expose session
 lifecycle and opt-in fail-closed policy-update handling; add regression tests.
 See docs/upstream-patch.md.
-The upstream license and copyright notices are preserved.
+The upstream license and copyright notices are preserved. A copy of the
+upstream license is included in LICENSES/go-openvpn-AGPL-3.0.txt so binary
+packages retain it independently of the submodule checkout.
 
 The DNS message codec uses golang.org/x/net/dns/dnsmessage v0.53.0
 (BSD-3-Clause). Its license is preserved in LICENSES/go-x-net-BSD-3-Clause.txt.

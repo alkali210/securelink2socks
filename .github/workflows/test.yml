@@ -1,0 +1,35 @@
+name: Offline checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      SECURELINK2SOCKS_E2E: '0'
+      GOWORK: 'off'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            third_party/go-openvpn/go.sum
+      - run: go test -timeout 5m ./...
+      - run: go vet ./...
+      - run: go -C third_party/go-openvpn test -parallel 1 -timeout 5m ./...
+      - run: go -C third_party/go-openvpn vet ./...
