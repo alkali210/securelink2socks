@@ -49,8 +49,7 @@ jobs:
           fi
           mkdir -p "$directory"
           go build -trimpath -o "${directory}/${binary}" ./cmd/securelink2socks
-          cp README.md LICENSE NOTICE "$directory/"
-          cp -R LICENSES "$directory/"
+          cp README.md LICENSE "$directory/"
       - name: Upload ${{ matrix.goos }}/${{ matrix.goarch }}
         uses: actions/upload-artifact@v7
         with:
