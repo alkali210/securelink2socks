@@ -36,11 +36,13 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          RELEASE_TAG: ${{ github.ref_name }}
           CGO_ENABLED: '0'
           GOWORK: 'off'
         run: |
           set -euo pipefail
           target="securelink2socks-${GOOS}-${GOARCH}"
+          archive="securelink2socks-${RELEASE_TAG#v}-${GOOS}-${GOARCH}"
           directory="dist/${target}"
           binary=securelink2socks
           if [[ "$GOOS" == windows ]]; then
@@ -51,9 +53,9 @@ jobs:
           cp README.md LICENSE NOTICE mihomo.yaml "$directory/"
           cp -R LICENSES docs "$directory/"
           if [[ "$GOOS" == windows ]]; then
-            (cd dist && zip -qr "../artifacts/${target}.zip" "$target")
+            (cd dist && zip -qr "../artifacts/${archive}.zip" "${target}")
           else
-            tar -C dist -czf "artifacts/${target}.tar.gz" "$target"
+            tar -C dist -czf "artifacts/${archive}.tar.gz" "${target}"
           fi
       - uses: actions/upload-artifact@v7
         with:
