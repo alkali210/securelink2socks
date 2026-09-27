@@ -28,6 +28,29 @@ type Snapshot struct {
 	domains []domainRule
 }
 
+// Entry describes one TCP authorization. Exactly one of Prefix and Domain is
+// set; Port == 0 means any nonzero port. Domains may start with "*.".
+type Entry struct {
+	Prefix netip.Prefix
+	Domain string
+	Port   uint16
+}
+
+// Entries returns a detached copy, preserving the snapshot's immutability.
+func (s *Snapshot) Entries() []Entry {
+	if s == nil {
+		return nil
+	}
+	entries := make([]Entry, 0, len(s.rules)+len(s.domains))
+	for _, r := range s.rules {
+		entries = append(entries, Entry{Prefix: r.prefix, Port: r.port})
+	}
+	for _, r := range s.domains {
+		entries = append(entries, Entry{Domain: r.name, Port: r.port})
+	}
+	return entries
+}
+
 func (s *Snapshot) Len() int {
 	if s == nil {
 		return 0

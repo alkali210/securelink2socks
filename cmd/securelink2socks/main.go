@@ -33,6 +33,8 @@ Usage:
   securelink2socks login --force      Start a fresh browser SSO login
   securelink2socks check              Authenticate, fetch config, check handshake/ACL
   securelink2socks check --aead-probe  Compatibility alias for the verified AEAD policy
+  securelink2socks export-mihomo [--fragment] [--output file.yaml]
+                                    Generate Mihomo routing from current VPN ACL
   securelink2socks probe IPv4:port    Also attempt an ACL-authorized TCP handshake
 
 No environment variables are required. Keep this terminal open; Ctrl-C exits.
@@ -71,10 +73,17 @@ func runWithServices(ctx context.Context, args []string, out io.Writer, svc serv
 	if automatic {
 		args = []string{"serve"}
 	}
+	var exportOpts exportOptions
 	var target netip.AddrPort
 	aeadProbe := len(args) == 2 && args[0] == "check" && args[1] == "--aead-probe"
 	forceLogin := len(args) == 2 && args[0] == "login" && args[1] == "--force"
 	switch args[0] {
+	case "export-mihomo":
+		var err error
+		exportOpts, err = parseExportOptions(args[1:])
+		if err != nil {
+			return err
+		}
 	case "login", "check", "serve":
 		if len(args) != 1 && !aeadProbe && !forceLogin {
 			return errors.New("unexpected arguments; use --help")
@@ -97,6 +106,11 @@ func runWithServices(ctx context.Context, args []string, out io.Writer, svc serv
 	home, err := storage.Home()
 	if err != nil {
 		return err
+	}
+	if args[0] == "export-mihomo" {
+		if err := exportOpts.resolve(home); err != nil {
+			return err
+		}
 	}
 	if automatic {
 		if err := svc.login(ctx, home, false, out); err != nil {
@@ -132,13 +146,19 @@ func runWithServices(ctx context.Context, args []string, out io.Writer, svc serv
 	if err != nil {
 		return err
 	}
-	var report tunnel.Report
+	perform := func(profile securelink.Profile) (tunnel.Report, error) {
+		if args[0] == "export-mihomo" {
+			return exportMihomo(ctx, profile, exportOpts)
+		}
+		if aeadProbe {
+			return tunnel.CheckAEAD(ctx, profile)
+		}
+		return tunnel.Check(ctx, profile, target)
+	}
 	if aeadProbe {
 		fmt.Fprintln(out, "AEAD policy: using profile CA + serverAuth verification; no CBC fallback.")
-		report, err = tunnel.CheckAEAD(ctx, profile)
-	} else {
-		report, err = tunnel.Check(ctx, profile, target)
 	}
+	report, err := perform(profile)
 	if errors.Is(err, tunnel.ErrVPNAuthRejected) {
 		fmt.Fprintln(out, "VPN authentication rejected; refreshing SecureLink session once...")
 		if err = c.EnsureSession(ctx, true); err != nil {
@@ -152,11 +172,13 @@ func runWithServices(ctx context.Context, args []string, out io.Writer, svc serv
 		if err != nil {
 			return err
 		}
-		if aeadProbe {
-			report, err = tunnel.CheckAEAD(ctx, profile)
-		} else {
-			report, err = tunnel.Check(ctx, profile, target)
+		report, err = perform(profile)
+	}
+	if args[0] == "export-mihomo" {
+		if err == nil {
+			fmt.Fprintln(out, "Mihomo configuration written to", exportOpts.output)
 		}
+		return err
 	}
 	if report.IPv4 != "" || report.Stage != "" {
 		if e := json.NewEncoder(out).Encode(report); e != nil {

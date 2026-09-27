@@ -18,7 +18,7 @@ Linux/macOS:
 
 原有子命令保留：`login` 仅登录，`login --force` 强制重新登录，`serve` 直接启动服务（不主动弹出登录），`check` 和 `probe IPv4:port` 用于诊断。运行中出现 `NeedsLogin` 时可重启无参数程序，或按下文使用另一终端登录。
 
-Mihomo 完整配置见 [mihomo.yaml](../mihomo.yaml)。退出旧进程并启动本仓库重新构建的 SecureLink 服务后导入配置，使用**规则模式**，应用代理地址为 `127.0.0.1:7890`。普通互联网走 DIRECT；`xmu.edu.cn` 和列出的校内 IPv4 走 XMU；SecureLink 进程、登录 API、`ids.xmu.edu.cn` 统一认证入口和 VPN 网关优先直连，防止代理循环。校园请求失败不会回退直连。FlClash 可能覆盖 YAML 的 TUN、DNS 和端口设置，应以其运行配置为准。
+优先运行 `export-mihomo` 生成当前账号的配置，步骤见 [规则生成与更新](mihomo-export.md)。[mihomo.yaml](../mihomo.yaml) 保留为手工示例。退出旧进程并启动本仓库重新构建的 SecureLink 服务后导入配置，使用**规则模式**，应用代理地址为 `127.0.0.1:7890`。生成配置将当前 ACL 授权的 TCP 资源送入 XMU，已知资源的其他端口和 UDP 被拒绝，未匹配的 `xmu.edu.cn` 域名也拒绝；普通互联网走 DIRECT。手工示例使用较宽的校园域名路由，最终仍由网关检查授权。SecureLink 进程、登录 API、`ids.xmu.edu.cn` 统一认证入口和 VPN 网关优先直连，防止代理循环。校园请求失败不会回退直连。FlClash 可能覆盖 YAML 的 TUN、DNS 和端口设置，应以其运行配置为准。
 
 SOCKS 支持 IPv4 和域名 TCP CONNECT。域名仅经当前 VPN 下发的 DNS 解析为 IPv4，再按域名+端口 ACL 或目标 IPv4+端口 ACL 授权；不存在系统 DNS／公网 DNS 回退。精确域名和 `*.example.edu` 子域名授权均支持，域名授权不会变成可供任意请求使用的 IP 授权。DNS 仅为内部查询，不开放 DNS 监听或 SOCKS UDP。
 

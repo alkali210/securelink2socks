@@ -133,3 +133,20 @@ func TestDomainRules(t *testing.T) {
 		}
 	}
 }
+
+func TestEntriesCannotMutateSnapshot(t *testing.T) {
+	s, err := ParsePush("app [domain:exact.invalid][proto:tcp port:443],app [addr:192.0.2.10/32][proto:any port:any]")
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := s.Entries()
+	for i := range entries {
+		entries[i] = Entry{}
+	}
+	if !s.AllowsDomainTCP("exact.invalid", 443) || !s.AllowsTCP(netip.MustParseAddrPort("192.0.2.10:80")) {
+		t.Fatal("export mutated policy")
+	}
+	if len(s.Entries()) != 2 {
+		t.Fatal("incomplete entries")
+	}
+}

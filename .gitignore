@@ -10,3 +10,6 @@ device_id
 !testdata/**/*.ovpn
 
 /output/playwright/
+
+/mihomo.generated.yaml
+/mihomo.fragment.yaml

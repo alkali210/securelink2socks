@@ -99,6 +99,12 @@ CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o bin/securelink2socks-windows
 | Linux | amd64、arm64 | `securelink2socks-linux-amd64`、`securelink2socks-linux-arm64` |
 | macOS | amd64、arm64 | `securelink2socks-darwin-amd64`、`securelink2socks-darwin-arm64` |
 
+## Mihomo 规则导出验证
+
+`internal/mihomo` 仅从不可变 ACL 生成配置，不接收原始 PUSH 或凭据。
+默认测试离线运行；可通过 `SECURELINK2SOCKS_MIHOMO` 指定本机内核，额外验证
+配置加载与合并后的真实路由。命令、规则边界及实机记录见 [导出说明](mihomo-export.md)。
+
 ## 联网验证
 
 CLI 无需环境变量即可联网；`SECURELINK2SOCKS_E2E` 只用于保护实机测试。

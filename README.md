@@ -1,16 +1,17 @@
 # securelink2socks
 
-将厦门大学 SecureLink 接入转换为本地 SOCKS5 代理，方便配合 Mihomo 等客户端访问获授权的校内资源。Windows 已完成实机验证；Linux 和 macOS 已通过交叉编译，仍待目标平台实测。
+将厦门大学 SecureLink 接入转换为本地 SOCKS5 代理，方便配合 Mihomo 等客户端访问获授权的校内资源。
 
 ## 功能
 
 - 浏览器 SSO 登录、会话缓存与自动刷新。
 - SOCKS5 TCP 代理，支持 IPv4 地址和域名目标。
-- 按服务器下发的 IP／域名及端口 ACL 授权，校园域名经 VPN 内 DNS 解析。
+- 按服务器下发的 IP/域名及端口 ACL 授权，校园域名经 VPN 内 DNS 解析。
+- 根据当前账号 ACL 自动生成 Mihomo 配置或合并片段。
 - 自动重连；断线或权限更新时撤销旧连接，校园请求失败不回退直连。
 - 纯用户态网络栈，本程序不创建 TUN/TAP，也不修改系统路由或 DNS。
 
-当前不支持 SOCKS UDP、IPv6 或 BIND。此前核心功能已通过用户实机验收；长期稳定性和吞吐量仍待专项验收。
+当前不支持 SOCKS UDP、IPv6 或 BIND。
 
 ## 使用
 
@@ -26,7 +27,13 @@ Linux/macOS 在终端运行 `./securelink2socks`。无需设置环境变量或�
 
 原有 `login`、`login --force`、`serve`、`check`、`probe IPv4:port` 仍可单独使用，帮助见 `--help`。源码构建步骤见 [开发指南](docs/development.md)。
 
-配合 Mihomo 时，导入 [mihomo.yaml](mihomo.yaml)，使用**规则模式**，应用代理地址为 `127.0.0.1:7890`。示例将校园资源送入 SecureLink，普通互联网和必要的认证入口直连。升级程序后需重启旧进程；更新 YAML 后需重新导入或更新客户端保存的副本。
+配合 Mihomo 时，先单独运行导出命令（会临时连接 VPN，完成后退出）：
+
+```powershell
+./securelink2socks.exe export-mihomo
+```
+
+导入命令提示的 `mihomo.generated.yaml`，再无参数启动本程序。已有公网代理配置可用 `--fragment` 导出合并片段，详见 [规则生成与更新](docs/mihomo-export.md)。使用**规则模式**，应用代理地址为 `127.0.0.1:7890`。完整配置将获授权的校园资源送入 SecureLink，普通互联网和必要的认证入口直连。升级程序后需重启旧进程；更新 YAML 后需重新导入或更新客户端保存的副本。
 
 会话默认保存在 `~/.securelink2socks/`，可用 `SECURELINK2SOCKS_HOME` 指定目录；登录与服务须使用同一目录。出现 `NeedsLogin` 时，在另一终端执行 `login --force`。
 
@@ -36,7 +43,7 @@ Linux/macOS 在终端运行 `./securelink2socks`。无需设置环境变量或�
 
 - [开发指南](docs/development.md)：构建、测试与协议资料。
 - [实机验证记录](docs/live-validation.md)：验证结果及边界。
-- [阶段计划](docs/roadmap.md)：下一阶段考虑基于 ACL 自动生成 Mihomo 分流规则。
+- [阶段计划](docs/roadmap.md)
 
 ## 致谢
 

@@ -26,6 +26,9 @@ type Session struct {
 }
 
 func (s *Session) AllowsTCP(target netip.AddrPort) bool { return s.acl.AllowsTCP(target) }
+
+// ACL returns the immutable policy of this verified session, not raw PUSH data.
+func (s *Session) ACL() *acl.Snapshot { return s.acl }
 func (s *Session) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	return s.stack.DialContext(ctx, network, address)
 }
