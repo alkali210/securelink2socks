@@ -27,35 +27,49 @@ import (
 const usage = `securelink2socks — XMU userspace SOCKS5 gateway
 
 Usage:
-	securelink2socks serve              SOCKS5 TCP on 127.0.0.1:1080
+  securelink2socks                    Login if needed, then run SOCKS5 service
+  securelink2socks serve              SOCKS5 TCP on 127.0.0.1:1080
   securelink2socks login              Browser SSO / reuse or refresh session
   securelink2socks login --force      Start a fresh browser SSO login
   securelink2socks check              Authenticate, fetch config, check handshake/ACL
   securelink2socks check --aead-probe  Compatibility alias for the verified AEAD policy
   securelink2socks probe IPv4:port    Also attempt an ACL-authorized TCP handshake
 
-All network commands require SECURELINK2SOCKS_E2E=1 during this stage.
+No environment variables are required. Keep this terminal open; Ctrl-C exits.
 State: SECURELINK2SOCKS_HOME or ~/.securelink2socks
 Optional callback injection: SL_CALLBACK_URL
 
 Listen override: SECURELINK2SOCKS_LISTEN (127.0.0.1:port only)
-SOCKS supports NO AUTH, IPv4 TCP CONNECT only; unavailable/denied fails closed.
+SOCKS supports NO AUTH, IPv4/domain TCP CONNECT; unavailable/denied fails closed.
 No host TUN, route or DNS changes are made.
 `
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	if err := run(ctx, os.Args[1:], os.Stdout); err != nil {
+	if err := run(ctx, os.Args[1:], os.Stdout); err != nil && !errors.Is(err, context.Canceled) {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
 }
 
+type services struct {
+	login func(context.Context, string, bool, io.Writer) error
+	serve func(context.Context, string, io.Writer) error
+}
+
 func run(ctx context.Context, args []string, out io.Writer) error {
-	if len(args) == 0 || (len(args) == 1 && (args[0] == "--help" || args[0] == "help" || args[0] == "-h")) {
+	return runWithServices(ctx, args, out, services{login: login, serve: serve})
+}
+
+func runWithServices(ctx context.Context, args []string, out io.Writer, svc services) error {
+	if len(args) == 1 && (args[0] == "--help" || args[0] == "help" || args[0] == "-h") {
 		_, err := io.WriteString(out, usage)
 		return err
+	}
+	automatic := len(args) == 0
+	if automatic {
+		args = []string{"serve"}
 	}
 	var target netip.AddrPort
 	aeadProbe := len(args) == 2 && args[0] == "check" && args[1] == "--aead-probe"
@@ -77,41 +91,33 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	default:
 		return errors.New("unknown command; use --help")
 	}
-	if os.Getenv("SECURELINK2SOCKS_E2E") != "1" {
-		return errors.New("live network commands require SECURELINK2SOCKS_E2E=1")
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	home, err := storage.Home()
 	if err != nil {
 		return err
 	}
+	if automatic {
+		if err := svc.login(ctx, home, false, out); err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+	}
 	if args[0] == "serve" {
-		return serve(ctx, home, out)
+		return svc.serve(ctx, home, out)
+	}
+	if args[0] == "login" {
+		return svc.login(ctx, home, forceLogin, out)
 	}
 	c, err := securelink.New(home)
 	if err != nil {
 		return err
 	}
-	callback := os.Getenv("SL_CALLBACK_URL")
-	if callback != "" {
-		err = c.Login(ctx, callback, nil)
-	} else {
-		if forceLogin {
-			err = securelink.ErrNeedsLogin
-		} else {
-			err = c.EnsureSession(ctx, false)
-		}
-		if errors.Is(err, securelink.ErrNeedsLogin) {
-			err = c.Login(ctx, "", func(ctx context.Context, loginURL string) (string, error) {
-				return prompt(ctx, loginURL, out, os.Stdin)
-			})
-		}
-	}
-	if err != nil {
+	if err := authenticate(ctx, c, false, out); err != nil {
 		return err
-	}
-	fmt.Fprintln(out, "SecureLink session ready.")
-	if args[0] == "login" {
-		return nil
 	}
 	config, err := c.VPNConfig(ctx)
 	if errors.Is(err, securelink.ErrNeedsLogin) {
@@ -158,6 +164,43 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 		}
 	}
 	return err
+}
+
+func login(ctx context.Context, home string, force bool, out io.Writer) error {
+	c, err := securelink.New(home)
+	if err != nil {
+		return err
+	}
+	return authenticate(ctx, c, force, out)
+}
+
+type sessionClient interface {
+	EnsureSession(context.Context, bool) error
+	Login(context.Context, string, securelink.CallbackPrompt) error
+}
+
+func authenticate(ctx context.Context, c sessionClient, forceLogin bool, out io.Writer) error {
+	var err error
+	callback := os.Getenv("SL_CALLBACK_URL")
+	if callback != "" {
+		err = c.Login(ctx, callback, nil)
+	} else {
+		if forceLogin {
+			err = securelink.ErrNeedsLogin
+		} else {
+			err = c.EnsureSession(ctx, false)
+		}
+		if errors.Is(err, securelink.ErrNeedsLogin) {
+			err = c.Login(ctx, "", func(ctx context.Context, loginURL string) (string, error) {
+				return prompt(ctx, loginURL, out, os.Stdin)
+			})
+		}
+	}
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(out, "SecureLink session ready.")
+	return nil
 }
 
 func serve(ctx context.Context, home string, out io.Writer) error {

@@ -1,24 +1,22 @@
 # 使用与排障
 
-Windows:
+Windows 可直接双击 `securelink2socks.exe`，或在终端运行：
 
 ```powershell
-$env:SECURELINK2SOCKS_E2E = '1'
-# 如果之前使用了独立会话目录，保持相同设置：
-# $env:SECURELINK2SOCKS_HOME = "$env:USERPROFILE/.securelink2socks-fresh"
-./bin/securelink2socks.exe login
-./bin/securelink2socks.exe serve
+./bin/securelink2socks.exe
 ```
 
 Linux/macOS:
 
 ```sh
-export SECURELINK2SOCKS_E2E=1
-./bin/securelink2socks login
-./bin/securelink2socks serve
+./bin/securelink2socks
 ```
 
-服务立即监听 `127.0.0.1:1080`；出现 `VPN state: Ready` 后允许授权连接。连接中/重连时监听保留，新请求立即失败；不会通过主机网络直连回退。Ctrl-C 关闭监听、连接、用户态栈和 VPN。
+无参数启动会先复用或刷新会话，必要时打开浏览器进行 SSO 并等待粘贴回调 URL，成功后自动进入服务。无需设置环境变量。若以前使用自定义会话目录，仍可设置 `SECURELINK2SOCKS_HOME` 沿用它。
+
+进入服务后监听 `127.0.0.1:1080`；出现 `VPN state: Ready` 后允许授权连接。连接中/重连时监听保留，新请求立即失败；不会通过主机网络直连回退。保持终端窗口打开，Ctrl-C 会关闭监听、连接、用户态栈和 VPN；关闭终端窗口也会终止程序，程序不在后台继续运行。
+
+原有子命令保留：`login` 仅登录，`login --force` 强制重新登录，`serve` 直接启动服务（不主动弹出登录），`check` 和 `probe IPv4:port` 用于诊断。运行中出现 `NeedsLogin` 时可重启无参数程序，或按下文使用另一终端登录。
 
 Mihomo 完整配置见 [mihomo.yaml](../mihomo.yaml)。退出旧进程并启动本仓库重新构建的 SecureLink 服务后导入配置，使用**规则模式**，应用代理地址为 `127.0.0.1:7890`。普通互联网走 DIRECT；`xmu.edu.cn` 和列出的校内 IPv4 走 XMU；SecureLink 进程、登录 API、`ids.xmu.edu.cn` 统一认证入口和 VPN 网关优先直连，防止代理循环。校园请求失败不会回退直连。FlClash 可能覆盖 YAML 的 TUN、DNS 和端口设置，应以其运行配置为准。
 
@@ -43,10 +41,9 @@ curl.exe -sS -L --max-time 30 --cookie-jar NUL -A "Mozilla/5.0" --proxy http://1
 
 ## 诊断与会话管理
 
-在本人有权使用的 XMU 账号和资源上，显式开启联网诊断：
+在本人有权使用的 XMU 账号和资源上运行诊断：
 
 ```powershell
-$env:SECURELINK2SOCKS_E2E = '1'
 ./bin/securelink2socks.exe login
 ./bin/securelink2socks.exe check
 # 保留此前诊断命令；现在与 check 使用相同的已验证策略：
@@ -62,3 +59,6 @@ $env:SECURELINK2SOCKS_E2E = '1'
 状态目录默认为 `~/.securelink2socks/`，可用 `SECURELINK2SOCKS_HOME` 覆盖。会话使用临时文件 + 同目录替换保存。Unix 文件模式为 0600；Windows 使用目录继承的访问控制，应保存在自己的用户目录中。
 
 当前日志仅输出状态，不支持原始 ACL dump。`SL_CALLBACK_URL` 可跳过手动输入，但回调通常短时有效且只能使用一次。
+
+`SECURELINK2SOCKS_E2E` 仅用于开发时显式启用实机测试，CLI 不再检查此变量。
+无参数启动的调度、会话选择、失败和取消路径已通过离线测试；双击窗口及真实 SSO 的新启动流程仍待实机验收。

@@ -101,6 +101,7 @@ CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o bin/securelink2socks-windows
 
 ## 联网验证
 
+CLI 无需环境变量即可联网；`SECURELINK2SOCKS_E2E` 只用于保护实机测试。
 普通测试不访问 XMU。使用自己的会话和有权访问的资源时，可显式运行以下回归：
 
 ```powershell

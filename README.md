@@ -10,42 +10,21 @@
 - 自动重连；断线或权限更新时撤销旧连接，校园请求失败不回退直连。
 - 纯用户态网络栈，本程序不创建 TUN/TAP，也不修改系统路由或 DNS。
 
-当前不支持 SOCKS UDP、IPv6 或 BIND。用户已确认当前阶段功能验证成功；长期稳定性和吞吐量仍待专项验收。
+当前不支持 SOCKS UDP、IPv6 或 BIND。此前核心功能已通过用户实机验收；长期稳定性和吞吐量仍待专项验收。
 
 ## 使用
 
-安装 Go 1.26.3 或更新版本。源码构建需要先拉取子模块：
-
-```sh
-git clone --recurse-submodules https://github.com/alkali210/securelink2socks.git
-cd securelink2socks
-# 已有工作区更新后执行：
-git submodule update --init --recursive
-```
-
-Windows:
+从 Actions 下载对应平台的二进制文件。Windows 直接双击 `securelink2socks.exe`，或在终端运行：
 
 ```powershell
-New-Item -ItemType Directory -Force bin | Out-Null
-go build -o bin/securelink2socks.exe ./cmd/securelink2socks
-$env:SECURELINK2SOCKS_E2E = '1'
-./bin/securelink2socks.exe login
-./bin/securelink2socks.exe serve
+./securelink2socks.exe
 ```
 
-Linux/macOS:
+Linux/macOS 在终端运行 `./securelink2socks`。无需设置环境变量或指定子命令：程序自动复用或刷新会话；需要登录时打开浏览器，按提示粘贴回调 URL，随后进入服务。
 
-```sh
-mkdir -p bin
-go build -o bin/securelink2socks ./cmd/securelink2socks
-export SECURELINK2SOCKS_E2E=1
-./bin/securelink2socks login
-./bin/securelink2socks serve
-```
+出现 `VPN state: Ready` 后，可使用本地 SOCKS5 地址 `127.0.0.1:1080`。运行期间保持终端窗口打开，按 Ctrl-C 或关闭窗口即可退出。
 
-或者在 Actions 下载构建的二进制文件，然后直接运行。
-
-按提示完成浏览器登录并粘贴回调 URL。出现 `VPN state: Ready` 后，可使用本地 SOCKS5 地址 `127.0.0.1:1080`。Ctrl-C 退出。
+原有 `login`、`login --force`、`serve`、`check`、`probe IPv4:port` 仍可单独使用，帮助见 `--help`。源码构建步骤见 [开发指南](docs/development.md)。
 
 配合 Mihomo 时，导入 [mihomo.yaml](mihomo.yaml)，使用**规则模式**，应用代理地址为 `127.0.0.1:7890`。示例将校园资源送入 SecureLink，普通互联网和必要的认证入口直连。升级程序后需重启旧进程；更新 YAML 后需重新导入或更新客户端保存的副本。
 
