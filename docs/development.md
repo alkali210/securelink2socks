@@ -72,7 +72,7 @@ go build -o bin/securelink2socks ./cmd/securelink2socks
 
 初期离线测试结果及上游并发测试的超时记录见 [离线验证记录](offline-validation.md)。
 
-## 交叉编译与 tag 产物
+## 交叉编译与手工构建产物
 
 项目不依赖 CGO。可在 Windows PowerShell 中指定目标平台，例如：
 

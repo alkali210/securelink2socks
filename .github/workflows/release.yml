@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    uses: ./.github/workflows/test.yml
+
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [windows, linux, darwin]
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Build and package
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+          GOWORK: 'off'
+        run: |
+          set -euo pipefail
+          target="securelink2socks-${GOOS}-${GOARCH}"
+          directory="dist/${target}"
+          binary=securelink2socks
+          if [[ "$GOOS" == windows ]]; then
+            binary+=.exe
+          fi
+          mkdir -p "$directory" artifacts
+          go build -trimpath -o "${directory}/${binary}" ./cmd/securelink2socks
+          cp README.md LICENSE NOTICE mihomo.yaml "$directory/"
+          cp -R LICENSES docs "$directory/"
+          if [[ "$GOOS" == windows ]]; then
+            (cd dist && zip -qr "../artifacts/${target}.zip" "$target")
+          else
+            tar -C dist -czf "artifacts/${target}.tar.gz" "$target"
+          fi
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: artifacts/*
+          if-no-files-found: error
+          compression-level: 0
+
+  publish:
+    needs: [checks, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: artifacts
+      - name: Checksums and GitHub Release
+        working-directory: artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          archives=(*.zip *.tar.gz)
+          if [[ ${#archives[@]} -ne 6 ]]; then
+            echo 'Expected all six platform archives' >&2
+            exit 1
+          fi
+          sha256sum "${archives[@]}" > SHA256SUMS.txt
+          options=(--verify-tag --generate-notes --title "$RELEASE_TAG")
+          if [[ "$RELEASE_TAG" == *-* ]]; then
+            options+=(--prerelease --latest=false)
+          fi
+          gh release create "$RELEASE_TAG" "${archives[@]}" SHA256SUMS.txt "${options[@]}"
